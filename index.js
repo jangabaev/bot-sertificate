@@ -96,3 +96,28 @@ bot.on("message", (msg) => {
   }
 });
 
+bot.onText(/\/start/, (msg) => {
+  const chatId = msg.chat.id;
+
+  bot.sendMessage(chatId, "Menuni tanlang 👇", {
+    reply_markup: {
+      keyboard: [
+        [
+          { text: "✍️ Test yaratish" },
+          { text: "✅ Javobni tekshirish" }
+        ],
+        [
+          { text: "📜 Sertifikatlar" },
+          { text: "⚙️ Sozlamalar" }
+        ],
+        [
+          { text: "📦 Pullik kanallar" },
+          { text: "👑 Admin" }
+        ]
+      ],
+      resize_keyboard: true,     // tugmalarni ekranga moslaydi
+      one_time_keyboard: false,  // menuni yopib yubormaydi
+      // input_field_placeholder: "Xabar yozing..." // xohlasangiz
+    }
+  });
+});
