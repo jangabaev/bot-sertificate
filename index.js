@@ -44,7 +44,65 @@ bot.onText(/\/language/, (msg) => {
   });
 });
 
+
+bot.on('callback_query', async (query) => {
+  if (query.data === "check_sub") {
+    const chatId = query.message.chat.id;
+    const userId = query.from.id;
+    const messageId = query.message.message_id; // Eski xabarni o'chirish uchun ID
+
+    try {
+      const channelId = -1002280402248;
+      const member = await bot.getChatMember(channelId, userId);
+
+      const isSubscribed = ["member", "administrator", "creator"].includes(member.status);
+
+      if (isSubscribed) {
+        await bot.answerCallbackQuery(query.id, {
+          text: "Muvaffaqiyatli tekshirildi! ✅",
+          show_alert: false,
+        });
+
+        await bot.deleteMessage(chatId, messageId);
+
+        await bot.sendMessage(chatId, "✨ **Marhamat, ishni boshlashingiz mumkin!**\n\nTestlarni boshlash uchun quyidagi menyudan foydalaning.", {
+            parse_mode: "Markdown"
+        });
+
+        await bot.sendMessage(chatId, "Menuni tanlang 👇", {
+    reply_markup: {
+      keyboard: [
+        [{ text: "✍️ Test yaratish" }, { text: "✅ Javobni tekshirish" }],
+        [{ text: "📜 Sertifikatlar" }, { text: "⚙️ Sozlamalar" }],
+        [{ text: "📦 Pullik kanallar" }, { text: "👑 Admin" }],
+      ],
+      resize_keyboard: true,
+    },
+  });
+
+      } else {
+        await bot.answerCallbackQuery(query.id, {
+          text: "📝 Matematika Milliy sertifikat\n" +
+                "━━━━━━━━━━━━━━━\n" +
+                "Davom etish uchun pastdagi\n" +
+                "kanalimizga a’zo bo‘ling! 👇\n" +
+                "━━━━━━━━━━━━━━━\n" +
+                "📢 @the_mukhtar",
+          show_alert: true
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      await bot.answerCallbackQuery(query.id, {
+        text: "❌ Tekshiruvda xatolik yuz berdi!",
+        show_alert: true,
+      });
+    }
+  }
+});
+
 bot.on("callback_query", async (query) => {
+  
   const chatId = query.message.chat.id;
 
   if (!query.data.startsWith("lang_")) return;
@@ -57,7 +115,7 @@ bot.on("callback_query", async (query) => {
     {
       chat_id: chatId,
       message_id: query.message.message_id,
-    }
+    },
   );
 
   await bot.sendMessage(chatId, messages[langCode].langSelected);
@@ -76,7 +134,7 @@ bot.on("message", (msg) => {
   if (msg.text === "/") {
     bot.sendMessage(
       chatId,
-      "Mavjud komandalar:\n/start - Botni boshlash\n/language - Tilni tanlash\n/help - Yordam"
+      "Mavjud komandalar:\n/start - Botni boshlash\n/language - Tilni tanlash\n/help - Yordam",
     );
   }
 });
@@ -94,7 +152,7 @@ bot.on("message", async (msg) => {
     textName = msg.text;
     return bot.sendMessage(
       chatId,
-      "Test nomi qabul qilindi endi javobni kirgizing"
+      "Test nomi qabul qilindi endi javobni kirgizing",
     );
   }
   if (testNameTrue) {
@@ -102,7 +160,15 @@ bot.on("message", async (msg) => {
     createTest = false;
     testNameTrue = false;
     try {
-      const responce = await fetch("http://192.168.1.104:5000/api/exam", {
+      // const responce = await fetch("http://192.168.1.104:5000/api/exam", {
+      //   method: "POST",
+      //   headers: {
+      //     "Content-Type": "application/json",
+      //   },
+      //   body: JSON.stringify({ name: textName, currect_answer: testAnswer }),
+      // });
+      console.log("Yuborilayotgan ma'lumot:");
+      const responce = await fetch("http://localhost:5000/api/bot", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -125,7 +191,7 @@ bot.on("message", async (msg) => {
     } catch (error) {}
     return bot.sendMessage(
       chatId,
-      `Test yaratildi!\nTest nomi: ${testName}\nJavob: ${testAnswer}`
+      `Test yaratildi!\nTest nomi: ${testName}\nJavob: ${testAnswer}`,
     );
   }
   if (msg.text === "✍️ Test yaratish") {
@@ -143,68 +209,71 @@ bot.on("message", async (msg) => {
   }
 });
 
-//bottni start bosganda
-bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id;
-  const lang = userLanguages[chatId] || "uz";
-  bot.sendMessage(chatId, messages[lang].start, {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "🌐 Open Web App",
-            web_app: { url: "https://sertificate-0jzs.onrender.com/" },
-          },
-        ],
-      ],
-    },
-  });
+bot.on("callback_query", async (query) => {});
 
-  bot.sendMessage(chatId, "Menuni tanlang 👇", {
-    reply_markup: {
-      keyboard: [
-        [{ text: "✍️ Test yaratish" }, { text: "✅ Javobni tekshirish" }],
-        [{ text: "📜 Sertifikatlar" }, { text: "⚙️ Sozlamalar" }],
-        [{ text: "📦 Pullik kanallar" }, { text: "👑 Admin" }],
-      ],
-      resize_keyboard: true,
-      one_time_keyboard: false,
-    },
-  });
+// //bottni start bosganda
+// bot.onText(/\/start/, async (msg) => {
+//   const chatId = msg.chat.id;
+//   const lang = userLanguages[chatId] || "uz";
+//   bot.sendMessage(chatId, messages[lang].start, {
+//     reply_markup: {
+//       inline_keyboard: [
+//         [
+//           {
+//             text: "🌐 Open Web App",
+//             web_app: { url: "https://sertificate-0jzs.onrender.com/" },
+//           },
+//         ],
+//       ],
+//     },
+//   });
 
-  // const userData = {
-  //   user_id: msg.from.id,
-  //   username: msg.from.username || "",
-  //   first_name: msg.from.first_name || "",
-  //   last_name: msg.from.last_name || "",
-  // };
+//   bot.sendMessage(chatId, "Menuni tanlang 👇", {
+//     reply_markup: {
+//       keyboard: [
+//         [{ text: "✍️ Test yaratish" }, { text: "✅ Javobni tekshirish" }],
+//         [{ text: "📜 Sertifikatlar" }, { text: "⚙️ Sozlamalar" }],
+//         [{ text: "📦 Pullik kanallar" }, { text: "👑 Admin" }],
+//       ],
+//       resize_keyboard: true,
+//       one_time_keyboard: false,
+//     },
+//   });
 
-  // console.log("Yuborilayotgan ma'lumot:", userData);
+//   // const userData = {
+//   //   user_id: msg.from.id,
+//   //   username: msg.from.username || "",
+//   //   first_name: msg.from.first_name || "",
+//   //   last_name: msg.from.last_name || "",
+//   // };
 
-  // // BACKENDga POST so‘rov yuborish
-  // try {
-  //   await fetch("http://192.168.1.104:5000/api/users/register", {
-  //     method: "POST",
-  //     headers: {
-  //       "Content-Type": "application/json",
-  //     },
-  //     body: JSON.stringify(userData),
-  //   });
+//   // console.log("Yuborilayotgan ma'lumot:", userData);
 
-  //   bot.sendMessage(chatId, "Salom! Sizning ma'lumotlaringiz qayd qilindi ✅");
-  // } catch (err) {
-  //   console.error("POST xato:", err);
-  //   bot.sendMessage(chatId, "Server bilan bog‘lanishda xatolik ❌");
-  // }
-});
+//   // // BACKENDga POST so‘rov yuborish
+//   // try {
+//   //   await fetch("http://192.168.1.104:5000/api/users/register", {
+//   //     method: "POST",
+//   //     headers: {
+//   //       "Content-Type": "application/json",
+//   //     },
+//   //     body: JSON.stringify(userData),
+//   //   });
+
+//   //   bot.sendMessage(chatId, "Salom! Sizning ma'lumotlaringiz qayd qilindi ✅");
+//   // } catch (err) {
+//   //   console.error("POST xato:", err);
+//   //   bot.sendMessage(chatId, "Server bilan bog‘lanishda xatolik ❌");
+//   // }
+// });
 
 bot.onText(/\/start/, (msg) => {
+  const userId = msg.from.id;
   const chatId = msg.chat.id;
   const lang = userLanguages[chatId] || "uz";
-  sendStartMenu(chatId, lang);
+  sendStartMenu(chatId, lang, userId);
 });
 
-async function sendStartMenu(chatId, lang) {
+async function sendStartMenu(chatId, lang, userId) {
   await bot.sendMessage(chatId, messages[lang].start, {
     reply_markup: {
       inline_keyboard: [
@@ -218,6 +287,10 @@ async function sendStartMenu(chatId, lang) {
     },
   });
 
+  if (checkFollow(chatId, userId)) {
+    return;
+  }
+
   await bot.sendMessage(chatId, "Menuni tanlang 👇", {
     reply_markup: {
       keyboard: [
@@ -228,4 +301,36 @@ async function sendStartMenu(chatId, lang) {
       resize_keyboard: true,
     },
   });
+  checkFollow(chatId, userId);
+}
+
+async function checkFollow(chatId, userId) {
+  try {
+    const channelId = -1002280402248;
+    const member = await bot.getChatMember(channelId, userId);
+
+    if (
+      member.status === "member" ||
+      member.status === "administrator" ||
+      member.status === "creator"
+    ) {
+      return true;
+    } else {
+      bot.sendMessage(chatId, "Kanalga a'zo bo'ling:", {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📢 Kanalga o'tish", url: "https://t.me/the_mukhtar" }],
+            [{ text: "✅ Tekshirish", callback_data: "check_sub" }],
+          ],
+        },
+      });
+      return false;
+    }
+  } catch (error) {
+    bot.sendMessage(
+      chatId,
+      `❌ Botdan foydalanish uchun avval kanalga a'zo bo'ling:\nhttps://t.me/the_mukhtar`,
+    );
+    return false;
+  }
 }
