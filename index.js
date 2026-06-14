@@ -1,41 +1,137 @@
+require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
-const token = "8300584993:AAE4MCh5CbNwUWsKI6g534r47oAPVa_N3qo";
 
-const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
-let userLanguages = {}; // { chatId: "uz" }
+const CEO_ID = parseInt(process.env.CEO_ID);
+const CHANNEL_ID = process.env.CHANNEL_ID;
+const BACKEND_URL = process.env.BACKEND_URL;
+const SITE_URL = process.env.SITE_URL;
 
-// Matnlar
-const messages = {
-  uz: {
-    start: "Salom! Bot ishga tushdi ✅",
-    help: "Yordam uchun /help bosing",
-    langSelected: "Siz O‘zbek tilini tanladingiz 🇺🇿",
-  },
-  ru: {
-    start: "Привет! Бот запущен ✅",
-    help: "Для помощи нажмите /help",
-    langSelected: "Вы выбрали Русский язык 🇷🇺",
-  },
-  en: {
-    start: "Hello! Bot started ✅",
-    help: "Press /help for assistance",
-    langSelected: "You selected English 🇬🇧",
-  },
-};
+// Admin ro'yxati (xotira ichida; restart bo'lsa tozalanadi)
+const admins = new Set();
+
+// Har bir foydalanuvchining holati (test yaratish jarayoni uchun)
+const userStates = new Map();
+
+// Til sozlamalari
+const userLanguages = {};
+
+const isCEO = (id) => id === CEO_ID;
+const isAdminOrCEO = (id) => isCEO(id) || admins.has(id);
+
+// ─── BOT KOMANDALAR ───────────────────────────────────────────────────────────
 
 bot.setMyCommands([
   { command: "/start", description: "Botni boshlash" },
+  { command: "/myid", description: "Telegram ID ni ko'rish" },
   { command: "/language", description: "Tilni tanlash" },
-  { command: "/help", description: "Yordam olish" },
+  { command: "/help", description: "Yordam" },
 ]);
 
+// /start
+bot.onText(/\/start/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  const subscribed = await checkSubscription(chatId, userId);
+  if (!subscribed) return;
+
+  // Backendga registratsiya
+  try {
+    await fetch(`${BACKEND_URL}/api/users/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: msg.from.id,
+        username: msg.from.username || "",
+        first_name: msg.from.first_name || "",
+        last_name: msg.from.last_name || "",
+      }),
+    });
+  } catch {
+    // server ishlamasa ham bot ishlashda davom etsin
+  }
+
+  await sendMainMenu(chatId, userId);
+});
+
+// /myid — o'z Telegram ID sini bilish uchun
+bot.onText(/\/myid/, (msg) => {
+  bot.sendMessage(
+    msg.chat.id,
+    `🆔 Sizning Telegram ID ingiz: \`${msg.from.id}\``,
+    { parse_mode: "Markdown" }
+  );
+});
+
+// /admin <userId> — faqat CEO ishlatishi mumkin
+bot.onText(/\/admin (\d+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  if (!isCEO(userId)) {
+    return bot.sendMessage(chatId, "❌ Bu buyruq faqat CEO uchun.");
+  }
+
+  const targetId = parseInt(match[1]);
+
+  if (targetId === CEO_ID) {
+    return bot.sendMessage(chatId, "⚠️ CEO allaqachon eng yuqori huquqqa ega.");
+  }
+
+  admins.add(targetId);
+  bot.sendMessage(chatId, `✅ Foydalanuvchi \`${targetId}\` admin qilib tayinlandi.`, {
+    parse_mode: "Markdown",
+  });
+
+  try {
+    await bot.sendMessage(
+      targetId,
+      "🎉 Siz admin qilib tayinlandingiz!\n\n/start bosing."
+    );
+  } catch {
+    // foydalanuvchi botni ishga tushirmagan bo'lishi mumkin
+  }
+});
+
+// /removeadmin <userId> — CEO admin o'chirishi uchun
+bot.onText(/\/removeadmin (\d+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  if (!isCEO(userId)) {
+    return bot.sendMessage(chatId, "❌ Bu buyruq faqat CEO uchun.");
+  }
+
+  const targetId = parseInt(match[1]);
+  admins.delete(targetId);
+  bot.sendMessage(chatId, `✅ \`${targetId}\` adminlikdan olindi.`, {
+    parse_mode: "Markdown",
+  });
+});
+
+// /admins — admin ro'yxatini ko'rish (CEO uchun)
+bot.onText(/\/admins/, (msg) => {
+  if (!isCEO(msg.from.id)) return;
+
+  if (admins.size === 0) {
+    return bot.sendMessage(msg.chat.id, "Hozircha adminlar yo'q.");
+  }
+
+  const list = [...admins].map((id) => `• \`${id}\``).join("\n");
+  bot.sendMessage(msg.chat.id, `👑 Adminlar ro'yxati:\n\n${list}`, {
+    parse_mode: "Markdown",
+  });
+});
+
+// /language
 bot.onText(/\/language/, (msg) => {
   bot.sendMessage(msg.chat.id, "Tilni tanlang:", {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: "🇺🇿 O‘zbekcha", callback_data: "lang_uz" },
+          { text: "🇺🇿 O'zbekcha", callback_data: "lang_uz" },
           { text: "🇷🇺 Русский", callback_data: "lang_ru" },
           { text: "🇬🇧 English", callback_data: "lang_en" },
         ],
@@ -44,292 +140,255 @@ bot.onText(/\/language/, (msg) => {
   });
 });
 
+// /help
+bot.onText(/\/help/, (msg) => {
+  const userId = msg.from.id;
+  let text = "ℹ️ *Yordam*\n\n";
+  text += "/start — Botni boshlash\n";
+  text += "/myid — Telegram ID ni ko'rish\n";
+  text += "/language — Tilni o'zgartirish\n";
 
-bot.on('callback_query', async (query) => {
-  if (query.data === "check_sub") {
-    const chatId = query.message.chat.id;
-    const userId = query.from.id;
-    const messageId = query.message.message_id; // Eski xabarni o'chirish uchun ID
+  if (isCEO(userId)) {
+    text += "\n*CEO buyruqlari:*\n";
+    text += "/admin <id> — Admin qo'shish\n";
+    text += "/removeadmin <id> — Adminni o'chirish\n";
+    text += "/admins — Adminlar ro'yxati\n";
+  }
 
+  bot.sendMessage(msg.chat.id, text, { parse_mode: "Markdown" });
+});
+
+// ─── CALLBACK QUERY (bitta handler) ──────────────────────────────────────────
+
+bot.on("callback_query", async (query) => {
+  const chatId = query.message.chat.id;
+  const userId = query.from.id;
+  const messageId = query.message.message_id;
+  const data = query.data;
+
+  // Kanalga obuna tekshiruvi
+  if (data === "check_sub") {
     try {
-      const channelId = -1002280402248;
-      const member = await bot.getChatMember(channelId, userId);
+      const member = await bot.getChatMember(CHANNEL_ID, userId);
+      const subscribed = ["member", "administrator", "creator"].includes(member.status);
 
-      const isSubscribed = ["member", "administrator", "creator"].includes(member.status);
-
-      if (isSubscribed) {
+      if (subscribed) {
         await bot.answerCallbackQuery(query.id, {
-          text: "Muvaffaqiyatli tekshirildi! ✅",
-          show_alert: false,
+          text: "✅ Muvaffaqiyatli tekshirildi!",
         });
-
         await bot.deleteMessage(chatId, messageId);
-
-        await bot.sendMessage(chatId, "✨ **Marhamat, ishni boshlashingiz mumkin!**\n\nTestlarni boshlash uchun quyidagi menyudan foydalaning.", {
-            parse_mode: "Markdown"
-        });
-
-        await bot.sendMessage(chatId, "Menuni tanlang 👇", {
-    reply_markup: {
-      keyboard: [
-        [{ text: "✍️ Test yaratish" }, { text: "✅ Javobni tekshirish" }],
-        [{ text: "📜 Sertifikatlar" }, { text: "⚙️ Sozlamalar" }],
-        [{ text: "📦 Pullik kanallar" }, { text: "👑 Admin" }],
-      ],
-      resize_keyboard: true,
-    },
-  });
-
+        await sendMainMenu(chatId, userId);
       } else {
         await bot.answerCallbackQuery(query.id, {
-          text: "📝 Matematika Milliy sertifikat\n" +
-                "━━━━━━━━━━━━━━━\n" +
-                "Davom etish uchun pastdagi\n" +
-                "kanalimizga a’zo bo‘ling! 👇\n" +
-                "━━━━━━━━━━━━━━━\n" +
-                "📢 @the_mukhtar",
-          show_alert: true
+          text: "❌ Siz hali kanalga a'zo emassiz!",
+          show_alert: true,
         });
       }
-    } catch (error) {
-      console.error(error);
+    } catch {
       await bot.answerCallbackQuery(query.id, {
-        text: "❌ Tekshiruvda xatolik yuz berdi!",
+        text: "❌ Tekshiruvda xatolik.",
         show_alert: true,
       });
     }
-  }
-});
-
-bot.on("callback_query", async (query) => {
-  
-  const chatId = query.message.chat.id;
-
-  if (!query.data.startsWith("lang_")) return;
-
-  const langCode = query.data.split("_")[1];
-  userLanguages[chatId] = langCode;
-
-  await bot.editMessageReplyMarkup(
-    { inline_keyboard: [] },
-    {
-      chat_id: chatId,
-      message_id: query.message.message_id,
-    },
-  );
-
-  await bot.sendMessage(chatId, messages[langCode].langSelected);
-
-  await sendStartMenu(chatId, langCode);
-
-  bot.answerCallbackQuery(query.id);
-});
-
-bot.onText(/\/help/, (msg) => {
-  bot.sendMessage(msg.chat.id, "Bu yordam menyusi.");
-});
-
-bot.on("message", (msg) => {
-  const chatId = msg.chat.id;
-  if (msg.text === "/") {
-    bot.sendMessage(
-      chatId,
-      "Mavjud komandalar:\n/start - Botni boshlash\n/language - Tilni tanlash\n/help - Yordam",
-    );
-  }
-});
-
-let createTest = false;
-let testNameTrue = false;
-let textName = "";
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  let testName = "";
-  if (createTest) {
-    testName = msg.text;
-    testNameTrue = true;
-    createTest = false;
-    textName = msg.text;
-    return bot.sendMessage(
-      chatId,
-      "Test nomi qabul qilindi endi javobni kirgizing",
-    );
-  }
-  if (testNameTrue) {
-    const testAnswer = msg.text;
-    createTest = false;
-    testNameTrue = false;
-    try {
-      // const responce = await fetch("http://192.168.1.104:5000/api/exam", {
-      //   method: "POST",
-      //   headers: {
-      //     "Content-Type": "application/json",
-      //   },
-      //   body: JSON.stringify({ name: textName, currect_answer: testAnswer }),
-      // });
-      console.log("Yuborilayotgan ma'lumot:");
-      const responce = await fetch("http://localhost:5000/api/bot", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name: textName, currect_answer: testAnswer }),
-      });
-      if (responce.status === 201) {
-        bot.sendMessage(chatId, `Test mufaqiyatli yaratildi: ${textName}`, {
-          reply_markup: {
-            keyboard: [
-              [{ text: "✍️ Test yaratish" }, { text: "✅ Javobni tekshirish" }],
-              [{ text: "📜 Sertifikatlar" }, { text: "⚙️ Sozlamalar" }],
-              [{ text: "📦 Pullik kanallar" }, { text: "👑 Admin" }],
-            ],
-            resize_keyboard: true,
-            one_time_keyboard: false,
-          },
-        });
-      }
-    } catch (error) {}
-    return bot.sendMessage(
-      chatId,
-      `Test yaratildi!\nTest nomi: ${testName}\nJavob: ${testAnswer}`,
-    );
-  }
-  if (msg.text === "✍️ Test yaratish") {
-    bot.sendMessage(chatId, "Test yaratish bo‘limiga xush kelibsiz!");
-    bot.sendMessage(chatId, "Test nomini yozing", {
-      reply_markup: {
-        keyboard: [],
-        resize_keyboard: true,
-        remove_keyboard: true,
-      },
-    });
-    createTest = true;
-  } else if (msg.text === "✅ Javobni tekshirish") {
-    bot.sendMessage(chatId, "Javobni tekshirish bo‘limiga xush kelibsiz!");
-  }
-});
-
-bot.on("callback_query", async (query) => {});
-
-// //bottni start bosganda
-// bot.onText(/\/start/, async (msg) => {
-//   const chatId = msg.chat.id;
-//   const lang = userLanguages[chatId] || "uz";
-//   bot.sendMessage(chatId, messages[lang].start, {
-//     reply_markup: {
-//       inline_keyboard: [
-//         [
-//           {
-//             text: "🌐 Open Web App",
-//             web_app: { url: "https://sertificate-0jzs.onrender.com/" },
-//           },
-//         ],
-//       ],
-//     },
-//   });
-
-//   bot.sendMessage(chatId, "Menuni tanlang 👇", {
-//     reply_markup: {
-//       keyboard: [
-//         [{ text: "✍️ Test yaratish" }, { text: "✅ Javobni tekshirish" }],
-//         [{ text: "📜 Sertifikatlar" }, { text: "⚙️ Sozlamalar" }],
-//         [{ text: "📦 Pullik kanallar" }, { text: "👑 Admin" }],
-//       ],
-//       resize_keyboard: true,
-//       one_time_keyboard: false,
-//     },
-//   });
-
-//   // const userData = {
-//   //   user_id: msg.from.id,
-//   //   username: msg.from.username || "",
-//   //   first_name: msg.from.first_name || "",
-//   //   last_name: msg.from.last_name || "",
-//   // };
-
-//   // console.log("Yuborilayotgan ma'lumot:", userData);
-
-//   // // BACKENDga POST so‘rov yuborish
-//   // try {
-//   //   await fetch("http://192.168.1.104:5000/api/users/register", {
-//   //     method: "POST",
-//   //     headers: {
-//   //       "Content-Type": "application/json",
-//   //     },
-//   //     body: JSON.stringify(userData),
-//   //   });
-
-//   //   bot.sendMessage(chatId, "Salom! Sizning ma'lumotlaringiz qayd qilindi ✅");
-//   // } catch (err) {
-//   //   console.error("POST xato:", err);
-//   //   bot.sendMessage(chatId, "Server bilan bog‘lanishda xatolik ❌");
-//   // }
-// });
-
-bot.onText(/\/start/, (msg) => {
-  const userId = msg.from.id;
-  const chatId = msg.chat.id;
-  const lang = userLanguages[chatId] || "uz";
-  sendStartMenu(chatId, lang, userId);
-});
-
-async function sendStartMenu(chatId, lang, userId) {
-  await bot.sendMessage(chatId, messages[lang].start, {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "🌐 Open Web App",
-            web_app: { url: "https://sertificate-0jzs.onrender.com/" },
-          },
-        ],
-      ],
-    },
-  });
-
-  if (checkFollow(chatId, userId)) {
     return;
   }
 
-  await bot.sendMessage(chatId, "Menuni tanlang 👇", {
-    reply_markup: {
-      keyboard: [
-        [{ text: "✍️ Test yaratish" }, { text: "✅ Javobni tekshirish" }],
-        [{ text: "📜 Sertifikatlar" }, { text: "⚙️ Sozlamalar" }],
-        [{ text: "📦 Pullik kanallar" }, { text: "👑 Admin" }],
-      ],
-      resize_keyboard: true,
-    },
-  });
-  checkFollow(chatId, userId);
-}
+  // Til tanlash
+  if (data.startsWith("lang_")) {
+    const langCode = data.split("_")[1];
+    userLanguages[chatId] = langCode;
 
-async function checkFollow(chatId, userId) {
-  try {
-    const channelId = -1002280402248;
-    const member = await bot.getChatMember(channelId, userId);
+    const langNames = { uz: "O'zbek tili 🇺🇿", ru: "Русский язык 🇷🇺", en: "English 🇬🇧" };
 
-    if (
-      member.status === "member" ||
-      member.status === "administrator" ||
-      member.status === "creator"
-    ) {
-      return true;
-    } else {
-      bot.sendMessage(chatId, "Kanalga a'zo bo'ling:", {
+    await bot.editMessageReplyMarkup(
+      { inline_keyboard: [] },
+      { chat_id: chatId, message_id: messageId }
+    );
+
+    await bot.sendMessage(chatId, `✅ Til tanlandi: *${langNames[langCode]}*`, {
+      parse_mode: "Markdown",
+    });
+
+    await sendMainMenu(chatId, userId);
+    await bot.answerCallbackQuery(query.id);
+    return;
+  }
+
+  await bot.answerCallbackQuery(query.id);
+});
+
+// ─── XABAR HANDLER ───────────────────────────────────────────────────────────
+
+bot.on("message", async (msg) => {
+  if (!msg.text || msg.text.startsWith("/")) return;
+
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const text = msg.text;
+  const state = userStates.get(chatId);
+
+  // ── Test yaratish holat mashina ──
+  if (state?.step === "awaiting_test_name") {
+    userStates.set(chatId, { step: "awaiting_test_answers", testName: text });
+    return bot.sendMessage(
+      chatId,
+      `📝 Test nomi qabul qilindi: *${text}*\n\nEndi javob variantlarini kiriting (vergul bilan ajrating):\nMasalan: \`A,B,C,D\``,
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  if (state?.step === "awaiting_test_answers") {
+    const answers = text.split(",").map((a) => a.trim()).filter(Boolean);
+    userStates.delete(chatId);
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/user`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: state.testName, responce: answers }),
+      });
+
+      if (res.ok || res.status === 201) {
+        await bot.sendMessage(
+          chatId,
+          `✅ Test muvaffaqiyatli yaratildi!\n📝 Nom: *${state.testName}*\n📋 Javoblar: ${answers.join(", ")}`,
+          { parse_mode: "Markdown" }
+        );
+      } else {
+        await bot.sendMessage(chatId, "❌ Server xatolik qaytardi. Test saqlanmadi.");
+      }
+    } catch {
+      await bot.sendMessage(chatId, "❌ Serverga ulanib bo'lmadi.");
+    }
+
+    return sendMainMenu(chatId, userId);
+  }
+
+  // ── Menyu tugmalari ──
+
+  if (text === "✍️ Test yaratish") {
+    if (!isAdminOrCEO(userId)) {
+      return bot.sendMessage(chatId, "❌ Bu funksiya faqat Admin/CEO uchun.");
+    }
+    userStates.set(chatId, { step: "awaiting_test_name" });
+    return bot.sendMessage(chatId, "Test nomini kiriting:", {
+      reply_markup: { remove_keyboard: true },
+    });
+  }
+
+  if (text === "📋 Active testlar") {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/tests/active`);
+      const tests = await res.json();
+
+      if (!Array.isArray(tests) || tests.length === 0) {
+        return bot.sendMessage(chatId, "📭 Hozircha active testlar mavjud emas.");
+      }
+
+      let message = "📋 *Active testlar:*\n\n";
+      tests.forEach((t, i) => {
+        message += `${i + 1}. ${t.name}\n`;
+      });
+
+      return bot.sendMessage(chatId, message, {
+        parse_mode: "Markdown",
         reply_markup: {
           inline_keyboard: [
-            [{ text: "📢 Kanalga o'tish", url: "https://t.me/the_mukhtar" }],
-            [{ text: "✅ Tekshirish", callback_data: "check_sub" }],
+            [{ text: "🌐 Saytga o'tib test topshirish", url: SITE_URL }],
           ],
         },
       });
-      return false;
+    } catch {
+      return bot.sendMessage(chatId, "❌ Testlarni olishda xatolik yuz berdi.");
     }
-  } catch (error) {
-    bot.sendMessage(
+  }
+
+  if (text === "📜 Natijalarim" || text === "📜 Sertifikatlar") {
+    return bot.sendMessage(chatId, "📊 Natijalarni ko'rish uchun saytga o'ting:", {
+      reply_markup: {
+        inline_keyboard: [[{ text: "🌐 Saytga o'tish", url: SITE_URL }]],
+      },
+    });
+  }
+
+  if (text === "🏆 Sertifikatlarim") {
+    return bot.sendMessage(chatId, "🏆 Sertifikatlarni ko'rish uchun saytga o'ting:", {
+      reply_markup: {
+        inline_keyboard: [[{ text: "🌐 Saytga o'tish", url: SITE_URL }]],
+      },
+    });
+  }
+
+  if (text === "⚙️ Sozlamalar") {
+    return bot.sendMessage(chatId, "⚙️ *Sozlamalar*\n\nTilni o'zgartirish uchun /language bosing.", {
+      parse_mode: "Markdown",
+    });
+  }
+
+  if (text === "👑 CEO Panel" || text === "👑 Admin Panel") {
+    if (!isAdminOrCEO(userId)) return;
+
+    let info = isCEO(userId)
+      ? `👑 *CEO Panel*\n\nAdminlar soni: ${admins.size}\n\n` +
+        `*Buyruqlar:*\n/admin <id> — admin qo'shish\n/removeadmin <id> — o'chirish\n/admins — ro'yxat`
+      : `👑 *Admin Panel*\n\nSiz admin sifatida test yaratishingiz mumkin.\n✍️ Test yaratish tugmasini bosing.`;
+
+    return bot.sendMessage(chatId, info, { parse_mode: "Markdown" });
+  }
+});
+
+// ─── YORDAMCHI FUNKSIYALAR ────────────────────────────────────────────────────
+
+async function sendMainMenu(chatId, userId) {
+  const ceoKeyboard = [
+    [{ text: "✍️ Test yaratish" }],
+  ];
+
+  const adminKeyboard = [
+    [{ text: "✍️ Test yaratish" }, { text: "📋 Active testlar" }],
+    [{ text: "📜 Sertifikatlar" }, { text: "⚙️ Sozlamalar" }],
+    [{ text: "📦 Pullik kanallar" }, { text: "👑 Admin Panel" }],
+  ];
+
+  const userKeyboard = [
+    [{ text: "📋 Active testlar" }, { text: "📜 Natijalarim" }],
+    [{ text: "🏆 Sertifikatlarim" }, { text: "⚙️ Sozlamalar" }],
+  ];
+
+  let keyboard;
+  if (isCEO(userId)) keyboard = ceoKeyboard;
+  else if (admins.has(userId)) keyboard = adminKeyboard;
+  else keyboard = userKeyboard;
+
+  await bot.sendMessage(chatId, "Menuni tanlang 👇", {
+    reply_markup: { keyboard, resize_keyboard: true },
+  });
+}
+
+async function checkSubscription(chatId, userId) {
+  try {
+    const member = await bot.getChatMember(CHANNEL_ID, userId);
+    if (["member", "administrator", "creator"].includes(member.status)) {
+      return true;
+    }
+
+    await bot.sendMessage(
       chatId,
-      `❌ Botdan foydalanish uchun avval kanalga a'zo bo'ling:\nhttps://t.me/the_mukhtar`,
+      "📢 Botdan foydalanish uchun avval kanalga a'zo bo'ling:",
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📢 Kanalga o'tish", url: "https://t.me/the_mukhtar" }],
+            [{ text: "✅ A'zo bo'ldim, tekshirish", callback_data: "check_sub" }],
+          ],
+        },
+      }
+    );
+    return false;
+  } catch {
+    await bot.sendMessage(
+      chatId,
+      "❌ Kanalga a'zo bo'ling: https://t.me/the_mukhtar"
     );
     return false;
   }
