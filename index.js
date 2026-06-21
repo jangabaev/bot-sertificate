@@ -7,6 +7,7 @@ const CEO_ID = parseInt(process.env.CEO_ID);
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const BACKEND_URL = process.env.BACKEND_URL;
 const SITE_URL = process.env.SITE_URL;
+const CREATE_TEST_URL = `${SITE_URL}/create`;
 
 // Admin ro'yxati (xotira ichida; restart bo'lsa tozalanadi)
 const admins = new Set();
@@ -25,6 +26,7 @@ const isAdminOrCEO = (id) => isCEO(id) || admins.has(id);
 bot.setMyCommands([
   { command: "/start", description: "Botni boshlash" },
   { command: "/myid", description: "Telegram ID ni ko'rish" },
+  { command: "/test", description: "Test yaratish va boshqarish" },
   { command: "/language", description: "Tilni tanlash" },
   { command: "/help", description: "Yordam" },
 ]);
@@ -39,7 +41,7 @@ bot.onText(/\/start/, async (msg) => {
 
   // Backendga registratsiya
   try {
-    await fetch(`${BACKEND_URL}/api/users/register`, {
+    await fetch(`${BACKEND_URL}/users`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -63,6 +65,17 @@ bot.onText(/\/myid/, (msg) => {
     `🆔 Sizning Telegram ID ingiz: \`${msg.from.id}\``,
     { parse_mode: "Markdown" }
   );
+});
+
+// /test — hamma foydalanuvchi test yaratishi va o'z testlarini boshqarishi uchun
+bot.onText(/^\/test(?:\s|$)/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  const subscribed = await checkSubscription(chatId, userId);
+  if (!subscribed) return;
+
+  return sendTestPanel(chatId);
 });
 
 // /admin <userId> — faqat CEO ishlatishi mumkin
@@ -146,6 +159,7 @@ bot.onText(/\/help/, (msg) => {
   let text = "ℹ️ *Yordam*\n\n";
   text += "/start — Botni boshlash\n";
   text += "/myid — Telegram ID ni ko'rish\n";
+  text += "/test — Test yaratish va boshqarish\n";
   text += "/language — Tilni o'zgartirish\n";
 
   if (isCEO(userId)) {
@@ -214,16 +228,72 @@ bot.on("callback_query", async (query) => {
     return;
   }
 
+  if (data === "test:new") {
+    await bot.answerCallbackQuery(query.id);
+    return sendCreateTestInvoice(chatId, userId);
+  }
+
+  if (data === "test:list") {
+    await bot.answerCallbackQuery(query.id);
+    return sendUserTests(chatId, userId);
+  }
+
+  if (data === "test:back") {
+    await bot.answerCallbackQuery(query.id);
+    return sendTestPanel(chatId);
+  }
+
+  if (data.startsWith("test:show:")) {
+    const testId = data.split(":")[2];
+    await bot.answerCallbackQuery(query.id);
+    return sendTestDetails(chatId, userId, testId);
+  }
+
+  if (data.startsWith("test:stop:")) {
+    const testId = data.split(":")[2];
+
+    try {
+      await stopTest(testId, userId);
+      await bot.answerCallbackQuery(query.id, {
+        text: "Test to'xtatildi.",
+      });
+      return sendTestDetails(chatId, userId, testId);
+    } catch {
+      await bot.answerCallbackQuery(query.id, {
+        text: "Testni to'xtatishda xatolik.",
+        show_alert: true,
+      });
+      return;
+    }
+  }
+
   await bot.answerCallbackQuery(query.id);
 });
 
+
+bot.on("pre_checkout_query", async (query) => {
+  await bot.answerPreCheckoutQuery(query.id, true);
+});
 // ─── XABAR HANDLER ───────────────────────────────────────────────────────────
 
 bot.on("message", async (msg) => {
-  if (!msg.text || msg.text.startsWith("/")) return;
-
   const chatId = msg.chat.id;
   const userId = msg.from.id;
+
+  if (msg.successful_payment) {
+    await bot.sendMessage(chatId, "✅ To'lov qabul qilindi.");
+
+    return bot.sendMessage(chatId, "📝 Test yaratish uchun saytga o'ting:", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🌐 Test yaratish", url: buildCreateTestUrl(null, userId) }],
+        ],
+      },
+    });
+  }
+
+  if (!msg.text || msg.text.startsWith("/")) return;
+
   const text = msg.text;
   const state = userStates.get(chatId);
 
@@ -267,18 +337,12 @@ bot.on("message", async (msg) => {
   // ── Menyu tugmalari ──
 
   if (text === "✍️ Test yaratish") {
-    if (!isAdminOrCEO(userId)) {
-      return bot.sendMessage(chatId, "❌ Bu funksiya faqat Admin/CEO uchun.");
-    }
-    userStates.set(chatId, { step: "awaiting_test_name" });
-    return bot.sendMessage(chatId, "Test nomini kiriting:", {
-      reply_markup: { remove_keyboard: true },
-    });
+    return sendCreateTestInvoice(chatId, userId);
   }
 
   if (text === "📋 Active testlar") {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/tests/active`);
+      const res = await fetch(`${BACKEND_URL}/test?sort_by=ACTIVE`);
       const tests = await res.json();
 
       if (!Array.isArray(tests) || tests.length === 0) {
@@ -339,13 +403,237 @@ bot.on("message", async (msg) => {
 
 // ─── YORDAMCHI FUNKSIYALAR ────────────────────────────────────────────────────
 
+async function sendTestPanel(chatId) {
+  return bot.sendMessage(chatId, "🧪 Test bo'limi:", {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "➕ Yangi test", callback_data: "test:new" }],
+        [{ text: "📚 Yaratilgan testlar", callback_data: "test:list" }],
+      ],
+    },
+  });
+}
+
+async function sendCreateTestInvoice(chatId, userId) {
+  return bot.sendInvoice(
+    chatId,
+    "Test yaratish",
+    "100 Telegram Stars evaziga yangi test yarating",
+    `create_test:${userId}:${Date.now()}`,
+    "",
+    "XTR",
+    [
+      {
+        label: "Yangi test yaratish",
+        amount: 100,
+      },
+    ]
+  );
+}
+
+async function sendUserTests(chatId, userId) {
+  try {
+    const tests = await getUserTests(userId);
+
+    if (!tests.length) {
+      return bot.sendMessage(chatId, "📭 Sizda hali yaratilgan testlar yo'q.", {
+        reply_markup: {
+          inline_keyboard: [[{ text: "➕ Yangi test", callback_data: "test:new" }]],
+        },
+      });
+    }
+
+    return bot.sendMessage(chatId, "📚 Yaratilgan testlaringiz:", {
+      reply_markup: {
+        inline_keyboard: [
+          ...tests.map((test, index) => [
+            {
+              text: `${index + 1}. ${getTestName(test)}`,
+              callback_data: `test:show:${getTestId(test)}`,
+            },
+          ]),
+          [{ text: "⬅️ Orqaga", callback_data: "test:back" }],
+        ],
+      },
+    });
+  } catch {
+    return bot.sendMessage(chatId, "❌ Testlaringizni olishda xatolik yuz berdi.");
+  }
+}
+
+async function sendTestDetails(chatId, userId, testId) {
+  try {
+    const test = await getTestById(testId, userId);
+    if (!isUserTest(test, userId)) {
+      throw new Error("Forbidden");
+    }
+
+    const id = getTestId(test) || testId;
+    const editUrl = buildCreateTestUrl(id, userId);
+
+    return bot.sendMessage(chatId, formatTestDetails(test, id), {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⛔ Testni tugatish", callback_data: `test:stop:${id}` }],
+          [{ text: "✏️ Javobni o'zgartirish", url: editUrl }],
+          [{ text: "⬅️ Testlar ro'yxati", callback_data: "test:list" }],
+        ],
+      },
+    });
+  } catch {
+    return bot.sendMessage(chatId, "❌ Test ma'lumotlarini olishda xatolik yuz berdi.");
+  }
+}
+
+async function getUserTests(userId) {
+  const data = await requestFirstOk([
+    { url: `${BACKEND_URL}/test?user_id=${userId}` },
+    { url: `${BACKEND_URL}/test?telegram_id=${userId}` },
+    { url: `${BACKEND_URL}/test?creator_id=${userId}` },
+    { url: `${BACKEND_URL}/tests?user_id=${userId}` },
+    { url: `${BACKEND_URL}/user/${userId}/tests` },
+  ]);
+
+  return normalizeTests(data)
+    .filter((test) => getTestId(test))
+    .filter((test) => isUserTest(test, userId));
+}
+
+async function getTestById(testId, userId) {
+  try {
+    return await requestFirstOk([
+      { url: `${BACKEND_URL}/test/${testId}` },
+      { url: `${BACKEND_URL}/tests/${testId}` },
+      { url: `${BACKEND_URL}/user/${testId}` },
+    ]);
+  } catch {
+    const tests = await getUserTests(userId);
+    const test = tests.find((item) => String(getTestId(item)) === String(testId));
+    if (!test) throw new Error("Test not found");
+    return test;
+  }
+}
+
+async function stopTest(testId, userId) {
+  const test = await getTestById(testId, userId);
+  if (!isUserTest(test, userId)) {
+    throw new Error("Forbidden");
+  }
+
+  return requestFirstOk([
+    {
+      url: `${BACKEND_URL}/test/${testId}`,
+      options: {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "INACTIVE", active: false, user_id: userId }),
+      },
+    },
+    {
+      url: `${BACKEND_URL}/test/${testId}/stop`,
+      options: {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId }),
+      },
+    },
+    {
+      url: `${BACKEND_URL}/test/${testId}/stop`,
+      options: {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId }),
+      },
+    },
+  ]);
+}
+
+async function requestFirstOk(requests) {
+  let lastError;
+
+  for (const request of requests) {
+    try {
+      const response = await fetch(request.url, request.options || {});
+      if (!response.ok) {
+        lastError = new Error(`HTTP ${response.status}`);
+        continue;
+      }
+
+      const text = await response.text();
+      if (!text) return {};
+
+      try {
+        return JSON.parse(text);
+      } catch {
+        return { raw: text };
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("Request failed");
+}
+
+function normalizeTests(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.tests)) return data.tests;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (data && typeof data === "object") return [data];
+  return [];
+}
+
+function getTestId(test) {
+  return test?._id || test?.id || test?.test_id;
+}
+
+function getTestName(test) {
+  return test?.name || test?.title || "Nomsiz test";
+}
+
+function getTestAnswers(test) {
+  return test?.responce || test?.response || test?.answers || [];
+}
+
+function isUserTest(test, userId) {
+  const ownerId = test?.user_id || test?.telegram_id || test?.creator_id || test?.owner_id;
+  if (!ownerId) return true;
+  return String(ownerId) === String(userId);
+}
+
+function buildCreateTestUrl(testId, userId) {
+  const baseUrl = testId ? `${CREATE_TEST_URL}/${testId}` : CREATE_TEST_URL;
+  return `${baseUrl}?telegram_id=${userId}`;
+}
+
+function formatTestDetails(test, fallbackId) {
+  const id = getTestId(test) || fallbackId;
+  const name = getTestName(test);
+  const status = test?.status || (test?.active === false ? "INACTIVE" : "ACTIVE");
+  const answers = getTestAnswers(test);
+  const answersText = Array.isArray(answers) && answers.length
+    ? answers.join(", ")
+    : "Kiritilmagan";
+
+  return (
+    `🧪 *Test ma'lumotlari*\n\n` +
+    `ID: \`${id}\`\n` +
+    `Nomi: *${name}*\n` +
+    `Holati: *${status}*\n` +
+    `Javoblar: ${answersText}`
+  );
+}
+
 async function sendMainMenu(chatId, userId) {
   const ceoKeyboard = [
-    [{ text: "✍️ Test yaratish" }],
+    [{ text: "📋 Active testlar" }, { text: "⚙️ Sozlamalar" }],
+    [{ text: "👑 CEO Panel" }],
   ];
 
   const adminKeyboard = [
-    [{ text: "✍️ Test yaratish" }, { text: "📋 Active testlar" }],
+    [{ text: "📋 Active testlar" }],
     [{ text: "📜 Sertifikatlar" }, { text: "⚙️ Sozlamalar" }],
     [{ text: "📦 Pullik kanallar" }, { text: "👑 Admin Panel" }],
   ];
