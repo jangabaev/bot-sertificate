@@ -418,14 +418,14 @@ async function sendCreateTestInvoice(chatId, userId) {
   return bot.sendInvoice(
     chatId,
     "Test yaratish",
-    "100 Telegram Stars evaziga yangi test yarating",
+    "10 Telegram Stars evaziga yangi test yarating",
     `create_test:${userId}:${Date.now()}`,
     "",
     "XTR",
     [
       {
         label: "Yangi test yaratish",
-        amount: 100,
+        amount: 10,
       },
     ]
   );
