@@ -267,6 +267,28 @@ bot.on("callback_query", async (query) => {
     }
   }
 
+  if (data.startsWith("test:excel:")) {
+    const testId = data.split(":")[2];
+    await bot.answerCallbackQuery(query.id);
+    userStates.set(chatId, { step: "awaiting_excel", testId });
+
+    return bot.sendMessage(
+      chatId,
+      `📊 *Excel orqali student javoblarini yuborish*\n\n` +
+      `Excel faylini quyidagi formatda tayyorlang:\n\n` +
+      `| student\\_id | full\\_name | answer |\n` +
+      `|------------|-----------|--------|\n` +
+      `| 12345      | Ali Valiyev | ABCDBA |\n` +
+      `| 67890      | Vali Aliyev | BCADBC |\n\n` +
+      `📌 *Qoidalar:*\n` +
+      `• 1-ustun: student ID (raqam)\n` +
+      `• 2-ustun: to'liq ism\n` +
+      `• 3-ustun: javoblar ketma-ketligi (masalan: ABCDBA)\n\n` +
+      `Faylni tayyorlagandan so'ng shu yerga yuboring (.xlsx yoki .xls formatda)`,
+      { parse_mode: "Markdown" }
+    );
+  }
+
   await bot.answerCallbackQuery(query.id);
 });
 
@@ -290,6 +312,55 @@ bot.on("message", async (msg) => {
         ],
       },
     });
+  }
+
+  // Excel fayl qabul qilish
+  if (msg.document) {
+    const state = userStates.get(chatId);
+    if (state?.step === "awaiting_excel") {
+      const doc = msg.document;
+      const isExcel =
+        doc.mime_type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+        doc.mime_type === "application/vnd.ms-excel" ||
+        doc.file_name?.endsWith(".xlsx") ||
+        doc.file_name?.endsWith(".xls");
+
+      if (!isExcel) {
+        return bot.sendMessage(chatId, "❌ Faqat Excel fayl (.xlsx yoki .xls) qabul qilinadi. Qaytadan yuboring.");
+      }
+
+      userStates.delete(chatId);
+
+      try {
+        const fileLink = await bot.getFileLink(doc.file_id);
+        const fileRes = await fetch(fileLink);
+        const fileBuffer = await fileRes.arrayBuffer();
+
+        const form = new (require("form-data"))();
+        form.append("file", Buffer.from(fileBuffer), {
+          filename: doc.file_name || "answers.xlsx",
+          contentType: doc.mime_type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        form.append("test_id", String(state.testId));
+        form.append("user_id", String(userId));
+
+        const uploadRes = await fetch(`${BACKEND_URL}/test/${state.testId}/answers/upload`, {
+          method: "POST",
+          body: form,
+          headers: form.getHeaders(),
+        });
+
+        if (uploadRes.ok || uploadRes.status === 201) {
+          return bot.sendMessage(chatId, "✅ Excel fayl muvaffaqiyatli yuborildi! Natijalar tez orada qayta ishlanadi.");
+        } else {
+          const errText = await uploadRes.text().catch(() => "");
+          return bot.sendMessage(chatId, `❌ Server xatolik qaytardi (${uploadRes.status}).\n${errText || ""}`);
+        }
+      } catch (err) {
+        return bot.sendMessage(chatId, "❌ Faylni yuborishda xatolik yuz berdi. Qaytadan urinib ko'ring.");
+      }
+    }
+    return;
   }
 
   if (!msg.text || msg.text.startsWith("/")) return;
@@ -470,13 +541,15 @@ async function sendTestDetails(chatId, userId, testId) {
 
     const id = getTestId(test) || testId;
     const editUrl = buildCreateTestUrl(id, userId);
+    const submissionCount = await getSubmissionCount(id);
 
-    return bot.sendMessage(chatId, formatTestDetails(test, id), {
+    return bot.sendMessage(chatId, formatTestDetails(test, id, submissionCount), {
       parse_mode: "Markdown",
       reply_markup: {
         inline_keyboard: [
           [{ text: "⛔ Testni tugatish", callback_data: `test:stop:${id}` }],
           [{ text: "✏️ Javobni o'zgartirish", url: editUrl }],
+          [{ text: "📊 Excel orqali javob yuborish", callback_data: `test:excel:${id}` }],
           [{ text: "⬅️ Testlar ro'yxati", callback_data: "test:list" }],
         ],
       },
@@ -608,7 +681,20 @@ function buildCreateTestUrl(testId, userId) {
   return `${baseUrl}?telegram_id=${userId}`;
 }
 
-function formatTestDetails(test, fallbackId) {
+async function getSubmissionCount(testId) {
+  try {
+    const data = await requestFirstOk([
+      { url: `${BACKEND_URL}/test/${testId}/submissions/count` },
+      { url: `${BACKEND_URL}/test/${testId}/submissions` },
+      { url: `${BACKEND_URL}/test/${testId}/results` },
+    ]);
+    return data?.count ?? data?.total ?? (Array.isArray(data) ? data.length : null);
+  } catch {
+    return null;
+  }
+}
+
+function formatTestDetails(test, fallbackId, submissionCount) {
   const id = getTestId(test) || fallbackId;
   const name = getTestName(test);
   const status = test?.status || (test?.active === false ? "INACTIVE" : "ACTIVE");
@@ -617,11 +703,15 @@ function formatTestDetails(test, fallbackId) {
     ? answers.join(", ")
     : "Kiritilmagan";
 
+  const countLine = submissionCount !== null && submissionCount !== undefined
+    ? `\n👥 Topshirganlar: *${submissionCount} ta*`
+    : "";
+
   return (
     `🧪 *Test ma'lumotlari*\n\n` +
     `ID: \`${id}\`\n` +
     `Nomi: *${name}*\n` +
-    `Holati: *${status}*\n` +
+    `Holati: *${status}*${countLine}\n` +
     `Javoblar: ${answersText}`
   );
 }
