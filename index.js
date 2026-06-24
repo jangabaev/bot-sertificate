@@ -7,7 +7,7 @@ const CEO_ID = parseInt(process.env.CEO_ID);
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const BACKEND_URL = process.env.BACKEND_URL;
 const SITE_URL = process.env.SITE_URL;
-const CREATE_TEST_URL = `${SITE_URL}/create`;
+const CREATE_TEST_URL = `${SITE_URL}createtest`;
 
 // Admin ro'yxati (xotira ichida; restart bo'lsa tozalanadi)
 const admins = new Set();
