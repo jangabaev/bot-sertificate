@@ -1,8 +1,10 @@
 require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
-
+const ExcelJS = require("exceljs");
+const FormData = require("form-data");
+const { Readable } = require("stream");
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
-
+bot.on("polling_error", () => {});
 const CEO_ID = parseInt(process.env.CEO_ID);
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const BACKEND_URL = process.env.BACKEND_URL;
@@ -35,11 +37,6 @@ bot.setMyCommands([
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
-
-  const subscribed = await checkSubscription(chatId, userId);
-  if (!subscribed) return;
-
-  // Backendga registratsiya
   try {
     await fetch(`${BACKEND_URL}/users`, {
       method: "POST",
@@ -54,6 +51,11 @@ bot.onText(/\/start/, async (msg) => {
   } catch {
     // server ishlamasa ham bot ishlashda davom etsin
   }
+  const subscribed = await checkSubscription(chatId, userId);
+  if (!subscribed) return;
+
+  // Backendga registratsiya
+
 
   await sendMainMenu(chatId, userId);
 });
@@ -174,6 +176,14 @@ bot.onText(/\/help/, (msg) => {
 
 // ─── CALLBACK QUERY (bitta handler) ──────────────────────────────────────────
 
+async function safeAnswer(queryId, opts = {}) {
+  try {
+    await bot.answerCallbackQuery(queryId, opts);
+  } catch {
+    // query muddati o'tgan bo'lsa jim o'tkazib yuboramiz
+  }
+}
+
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
   const userId = query.from.id;
@@ -187,19 +197,17 @@ bot.on("callback_query", async (query) => {
       const subscribed = ["member", "administrator", "creator"].includes(member.status);
 
       if (subscribed) {
-        await bot.answerCallbackQuery(query.id, {
-          text: "✅ Muvaffaqiyatli tekshirildi!",
-        });
+        await safeAnswer(query.id, { text: "✅ Muvaffaqiyatli tekshirildi!" });
         await bot.deleteMessage(chatId, messageId);
         await sendMainMenu(chatId, userId);
       } else {
-        await bot.answerCallbackQuery(query.id, {
+        await safeAnswer(query.id, {
           text: "❌ Siz hali kanalga a'zo emassiz!",
           show_alert: true,
         });
       }
     } catch {
-      await bot.answerCallbackQuery(query.id, {
+      await safeAnswer(query.id, {
         text: "❌ Tekshiruvda xatolik.",
         show_alert: true,
       });
@@ -224,72 +232,72 @@ bot.on("callback_query", async (query) => {
     });
 
     await sendMainMenu(chatId, userId);
-    await bot.answerCallbackQuery(query.id);
+    await safeAnswer(query.id);
     return;
   }
 
   if (data === "test:new") {
-    await bot.answerCallbackQuery(query.id);
+    await safeAnswer(query.id);
     return sendCreateTestInvoice(chatId, userId);
   }
 
   if (data === "test:list") {
-    await bot.answerCallbackQuery(query.id);
+    await safeAnswer(query.id);
     return sendUserTests(chatId, userId);
   }
 
   if (data === "test:back") {
-    await bot.answerCallbackQuery(query.id);
+    await safeAnswer(query.id);
     return sendTestPanel(chatId);
   }
 
   if (data.startsWith("test:show:")) {
     const testId = data.split(":")[2];
-    await bot.answerCallbackQuery(query.id);
+    await safeAnswer(query.id);
     return sendTestDetails(chatId, userId, testId);
   }
 
   if (data.startsWith("test:stop:")) {
     const testId = data.split(":")[2];
-
+    await safeAnswer(query.id);
     try {
-      await stopTest(testId, userId);
-      await bot.answerCallbackQuery(query.id, {
-        text: "Test to'xtatildi.",
-      });
+      const test = await getTestById(testId, userId).catch(() => null);
+      const result = await stopTest(testId, userId);
+      const testName = test ? getTestName(test) : null;
+      const creatorId = test?.createdByUserId || test?.user_id || userId;
+      await sendStopResults(chatId, result, testName, creatorId);
       return sendTestDetails(chatId, userId, testId);
     } catch {
-      await bot.answerCallbackQuery(query.id, {
-        text: "Testni to'xtatishda xatolik.",
-        show_alert: true,
-      });
+      await bot.sendMessage(chatId, "❌ Testni to'xtatishda xatolik.");
       return;
     }
   }
 
   if (data.startsWith("test:excel:")) {
     const testId = data.split(":")[2];
-    await bot.answerCallbackQuery(query.id);
+    await safeAnswer(query.id);
     userStates.set(chatId, { step: "awaiting_excel", testId });
 
     return bot.sendMessage(
       chatId,
       `📊 *Excel orqali student javoblarini yuborish*\n\n` +
-      `Excel faylini quyidagi formatda tayyorlang:\n\n` +
-      `| student\\_id | full\\_name | answer |\n` +
-      `|------------|-----------|--------|\n` +
-      `| 12345      | Ali Valiyev | ABCDBA |\n` +
-      `| 67890      | Vali Aliyev | BCADBC |\n\n` +
+      `Excel fayli *quyidagi formatda* bo'lishi kerak:\n\n` +
+      `*1-qator (sarlavha):*\n` +
+      `\`Ism | 1 | 2 | 3 | 4 | ... | N\`\n\n` +
+      `*2-qatordan boshlab (har bir student):*\n` +
+      `\`Ali Valiyev | 1 | 0 | 1 | 1 | ... \`\n` +
+      `\`Vali Aliyev | 0 | 1 | 1 | 0 | ... \`\n\n` +
       `📌 *Qoidalar:*\n` +
-      `• 1-ustun: student ID (raqam)\n` +
-      `• 2-ustun: to'liq ism\n` +
-      `• 3-ustun: javoblar ketma-ketligi (masalan: ABCDBA)\n\n` +
-      `Faylni tayyorlagandan so'ng shu yerga yuboring (.xlsx yoki .xls formatda)`,
+      `• A ustun: student to'liq ismi\n` +
+      `• B, C, D... ustunlar: savol raqamlari (1, 2, 3...)\n` +
+      `• Javob to'g'ri bo'lsa: \`1\` yoki \`to'g'ri\`\n` +
+      `• Javob noto'g'ri bo'lsa: \`0\` yoki boshqa qiymat\n\n` +
+      `Faylni tayyorlagandan so'ng shu yerga yuboring (.xlsx formatda)`,
       { parse_mode: "Markdown" }
     );
   }
 
-  await bot.answerCallbackQuery(query.id);
+  await safeAnswer(query.id);
 });
 
 
@@ -319,6 +327,7 @@ bot.on("message", async (msg) => {
     const state = userStates.get(chatId);
     if (state?.step === "awaiting_excel") {
       const doc = msg.document;
+      console.log(doc)
       const isExcel =
         doc.mime_type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
         doc.mime_type === "application/vnd.ms-excel" ||
@@ -336,27 +345,48 @@ bot.on("message", async (msg) => {
         const fileRes = await fetch(fileLink);
         const fileBuffer = await fileRes.arrayBuffer();
 
-        const form = new (require("form-data"))();
-        form.append("file", Buffer.from(fileBuffer), {
+        const buf = Buffer.from(fileBuffer);
+        const form = new FormData();
+        form.append("file", buf, {
           filename: doc.file_name || "answers.xlsx",
           contentType: doc.mime_type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          knownLength: buf.length,
         });
         form.append("test_id", String(state.testId));
         form.append("user_id", String(userId));
 
-        const uploadRes = await fetch(`${BACKEND_URL}/test/${state.testId}/answers/upload`, {
-          method: "POST",
-          body: form,
-          headers: form.getHeaders(),
+        // form'ni avval to'liq buffer'ga o'giramiz — Content-Length aniq bo'lsin
+        const formBuffer = await new Promise((resolve, reject) => {
+          form.getLength((err, length) => {
+            if (err) return reject(err);
+            const chunks = [];
+            form.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+            form.on("end", () => resolve({ buf: Buffer.concat(chunks), length }));
+            form.on("error", reject);
+            form.resume();
+          });
         });
+
+        const uploadRes = await fetch(
+          `${BACKEND_URL}/test/import-excel`,
+          {
+            method: "POST",
+            body: formBuffer.buf,
+            headers: {
+              ...form.getHeaders(),
+              "Content-Length": String(formBuffer.length),
+            },
+          }
+        );
 
         if (uploadRes.ok || uploadRes.status === 201) {
           return bot.sendMessage(chatId, "✅ Excel fayl muvaffaqiyatli yuborildi! Natijalar tez orada qayta ishlanadi.");
         } else {
           const errText = await uploadRes.text().catch(() => "");
-          return bot.sendMessage(chatId, `❌ Server xatolik qaytardi (${uploadRes.status}).\n${errText || ""}`);
+          return bot.sendMessage(chatId, `❌ Server xatolik qaytardi (${uploadRes.status}).${errText ? "\n" + errText : ""}`);
         }
       } catch (err) {
+        console.error("EXCEL UPLOAD ERROR:", err);
         return bot.sendMessage(chatId, "❌ Faylni yuborishda xatolik yuz berdi. Qaytadan urinib ko'ring.");
       }
     }
@@ -465,7 +495,7 @@ bot.on("message", async (msg) => {
 
     let info = isCEO(userId)
       ? `👑 *CEO Panel*\n\nAdminlar soni: ${admins.size}\n\n` +
-        `*Buyruqlar:*\n/admin <id> — admin qo'shish\n/removeadmin <id> — o'chirish\n/admins — ro'yxat`
+      `*Buyruqlar:*\n/admin <id> — admin qo'shish\n/removeadmin <id> — o'chirish\n/admins — ro'yxat`
       : `👑 *Admin Panel*\n\nSiz admin sifatida test yaratishingiz mumkin.\n✍️ Test yaratish tugmasini bosing.`;
 
     return bot.sendMessage(chatId, info, { parse_mode: "Markdown" });
@@ -589,37 +619,17 @@ async function getTestById(testId, userId) {
 }
 
 async function stopTest(testId, userId) {
-  const test = await getTestById(testId, userId);
-  if (!isUserTest(test, userId)) {
-    throw new Error("Forbidden");
-  }
+  const response = await fetch(`${BACKEND_URL}/rash/stop/${testId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "user_id": String(userId),
+    },
+  });
 
-  return requestFirstOk([
-    {
-      url: `${BACKEND_URL}/test/${testId}`,
-      options: {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "INACTIVE", active: false, user_id: userId }),
-      },
-    },
-    {
-      url: `${BACKEND_URL}/test/${testId}/stop`,
-      options: {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId }),
-      },
-    },
-    {
-      url: `${BACKEND_URL}/test/${testId}/stop`,
-      options: {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId }),
-      },
-    },
-  ]);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
 }
 
 async function requestFirstOk(requests) {
@@ -656,6 +666,220 @@ function normalizeTests(data) {
   if (Array.isArray(data?.items)) return data.items;
   if (data && typeof data === "object") return [data];
   return [];
+}
+
+async function sendStopResults(chatId, result, testName, creatorUserId) {
+  if (!result || typeof result !== "object") return;
+
+  const gradeStats = result.grade_stats;
+  const newStudents = result.new_students;
+  const delivery = result.delivery;
+
+  if (!gradeStats && !newStudents) return;
+
+  const gradeOrder = ["A+", "A", "B+", "B", "C+", "C", "NC"];
+  const gradeEmoji = { "A+": "🥇", "A": "🥈", "B+": "🏅", "B": "🎖️", "C+": "📗", "C": "📘", "NC": "❌" };
+
+  const totalParticipants =
+    result.total ||
+    (gradeStats ? Object.values(gradeStats).reduce((a, b) => a + b, 0) : 0);
+
+  // ── Xabar matni ──────────────────────────────────────────────────
+  let text = `📊 *Test yakunlandi!*\n`;
+  if (testName) text += `📝 Test: *${testName}*\n`;
+  text += `👥 Jami qatnashdi: *${totalParticipants} ta*\n\n`;
+
+  if (gradeStats) {
+    text += `📈 *Baholar taqsimoti:*\n`;
+    for (const grade of gradeOrder) {
+      if (gradeStats[grade] !== undefined) {
+        const count = gradeStats[grade];
+        const pct = totalParticipants > 0 ? Math.round((count / totalParticipants) * 100) : 0;
+        const filled = Math.round(pct / 10);
+        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
+        text += `${gradeEmoji[grade]} *${grade}*: ${count} ta (${pct}%) \`${bar}\`\n`;
+      }
+    }
+  }
+
+  if (delivery) {
+    text += `\n📬 Yuborildi: *${delivery.sent_count || 0}*`;
+    if (delivery.failed_students?.length > 0)
+      text += ` | ❌ Xato: *${delivery.failed_students.length}*`;
+    text += "\n";
+  }
+
+  if (Array.isArray(newStudents) && newStudents.length > 0) {
+    const top5 = [...newStudents]
+      .sort((a, b) => (b.total_ball || 0) - (a.total_ball || 0))
+      .slice(0, 5);
+    text += `\n🏆 *Top 5:*\n`;
+    top5.forEach((s, i) => {
+      const medal = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"][i];
+      text += `${medal} ${s.name} — ${gradeEmoji[s.degree] || ""}*${s.degree}* (${(s.total_ball || 0).toFixed(1)}%)\n`;
+    });
+  }
+
+  text += `\n📎 Excel natijalar fayli yuborilmoqda...`;
+  await bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
+
+  // ── Excel fayl xotirada yaratish ──────────────────────────────────
+  try {
+    const buffer = await buildResultsExcel(result, testName);
+    const target = creatorUserId || chatId;
+    const filename = `natijalar_${(testName || "test").replace(/\s+/g, "_")}_${Date.now()}.xlsx`;
+
+    const stream = Readable.from(buffer);
+    stream.path = filename;
+
+    await bot.sendDocument(
+      target,
+      stream,
+      { caption: `📊 *${testName || "Test"}* natijalari`, parse_mode: "Markdown" },
+      { filename, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
+    );
+  } catch (err) {
+    await bot.sendMessage(chatId, "⚠️ Excel faylni yaratishda xatolik yuz berdi.");
+  }
+}
+
+async function buildResultsExcel(result, testName) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Test Bot";
+  workbook.created = new Date();
+
+  const gradeOrder = ["A+", "A", "B+", "B", "C+", "C", "NC"];
+  const gradeColors = {
+    "A+": "FF2E7D32", "A": "FF388E3C", "B+": "FF1565C0", "B": "FF1976D2",
+    "C+": "FFEF6C00", "C": "FFF57C00", "NC": "FFC62828",
+  };
+
+  // ── 1-varaq: Talabalar natijalari ─────────────────────────────────
+  const sheet1 = workbook.addWorksheet("Natijalar", { views: [{ state: "frozen", ySplit: 1 }] });
+
+  const headerFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1565C0" } };
+  const headerFont = { color: { argb: "FFFFFFFF" }, bold: true, size: 12 };
+  const borderStyle = { style: "thin", color: { argb: "FFBDBDBD" } };
+  const allBorders = { top: borderStyle, left: borderStyle, bottom: borderStyle, right: borderStyle };
+
+  sheet1.columns = [
+    { header: "№", key: "num", width: 6 },
+    { header: "Ism Familiya", key: "name", width: 28 },
+    { header: "Baho", key: "degree", width: 10 },
+    { header: "Ball (%)", key: "ball", width: 12 },
+    { header: "To'g'ri", key: "correct", width: 10 },
+    { header: "Noto'g'ri", key: "incorrect", width: 12 },
+    { header: "User ID", key: "user_id", width: 28 },
+  ];
+
+  // Header styling
+  sheet1.getRow(1).eachCell((cell) => {
+    cell.fill = headerFill;
+    cell.font = headerFont;
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = allBorders;
+  });
+  sheet1.getRow(1).height = 22;
+
+  const students = Array.isArray(result.new_students) ? result.new_students : [];
+  const sorted = [...students].sort((a, b) => (b.total_ball || 0) - (a.total_ball || 0));
+
+  sorted.forEach((s, i) => {
+    const row = sheet1.addRow({
+      num: i + 1,
+      name: s.name || "",
+      degree: s.degree || "",
+      ball: parseFloat((s.total_ball || 0).toFixed(2)),
+      correct: s.currect !== undefined ? parseFloat(s.currect.toFixed(1)) : "",
+      incorrect: s.incorect !== undefined ? parseFloat(s.incorect.toFixed(1)) : "",
+      user_id: s.user_id || "",
+    });
+
+    row.height = 18;
+    const degreeColor = gradeColors[s.degree] || "FF757575";
+
+    row.eachCell((cell) => {
+      cell.border = allBorders;
+      cell.alignment = { vertical: "middle" };
+    });
+
+    // Baho ustunini rangli qilish
+    const degreeCell = row.getCell("degree");
+    degreeCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: degreeColor } };
+    degreeCell.font = { color: { argb: "FFFFFFFF" }, bold: true };
+    degreeCell.alignment = { horizontal: "center", vertical: "middle" };
+
+    row.getCell("num").alignment = { horizontal: "center", vertical: "middle" };
+    row.getCell("ball").alignment = { horizontal: "center", vertical: "middle" };
+
+    // Juft qatorlar uchun och fon
+    if (i % 2 === 1) {
+      ["num", "name", "ball", "correct", "incorrect", "user_id"].forEach((key) => {
+        row.getCell(key).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F5F5" } };
+      });
+    }
+  });
+
+  // ── 2-varaq: Statistika ───────────────────────────────────────────
+  const sheet2 = workbook.addWorksheet("Statistika");
+  const gradeStats = result.grade_stats || {};
+  const total = Object.values(gradeStats).reduce((a, b) => a + b, 0);
+
+  // Sarlavha
+  sheet2.mergeCells("A1:D1");
+  const titleCell = sheet2.getCell("A1");
+  titleCell.value = `${testName || "Test"} — Statistika`;
+  titleCell.font = { size: 14, bold: true, color: { argb: "FF1565C0" } };
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  sheet2.getRow(1).height = 30;
+
+  sheet2.getRow(3).values = ["Baho", "Soni", "Foizi (%)", "Grafik"];
+  sheet2.getRow(3).eachCell((cell) => {
+    cell.fill = headerFill;
+    cell.font = headerFont;
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = allBorders;
+  });
+  sheet2.getRow(3).height = 22;
+
+  sheet2.columns = [
+    { key: "grade", width: 12 },
+    { key: "count", width: 10 },
+    { key: "pct", width: 12 },
+    { key: "bar", width: 30 },
+  ];
+
+  let rowIdx = 4;
+  for (const grade of gradeOrder) {
+    if (gradeStats[grade] === undefined) continue;
+    const count = gradeStats[grade];
+    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+    const bar = "■".repeat(Math.round(pct / 5));
+
+    const row = sheet2.getRow(rowIdx);
+    row.values = [grade, count, `${pct}%`, bar];
+    row.height = 18;
+
+    const color = gradeColors[grade] || "FF757575";
+    row.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: color } };
+    row.getCell(1).font = { color: { argb: "FFFFFFFF" }, bold: true };
+    row.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+    row.eachCell((cell) => { cell.border = allBorders; });
+    rowIdx++;
+  }
+
+  // Jami qator
+  const totalRow = sheet2.getRow(rowIdx + 1);
+  totalRow.values = ["JAMI", total, "100%", ""];
+  totalRow.eachCell((cell) => {
+    cell.font = { bold: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEEEEE" } };
+    cell.border = allBorders;
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+  });
+
+  // Buffer sifatida qaytarish (fayl saqlanmaydi)
+  return workbook.xlsx.writeBuffer();
 }
 
 function getTestId(test) {
