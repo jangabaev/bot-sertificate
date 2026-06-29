@@ -51,8 +51,8 @@ bot.onText(/\/start/, async (msg) => {
   } catch {
     // server ishlamasa ham bot ishlashda davom etsin
   }
-  const subscribed = await checkSubscription(chatId, userId);
-  if (!subscribed) return;
+  // const subscribed = await checkSubscription(chatId, userId);
+  // if (!subscribed) return;
 
   // Backendga registratsiya
 
@@ -74,8 +74,8 @@ bot.onText(/^\/test(?:\s|$)/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
 
-  const subscribed = await checkSubscription(chatId, userId);
-  if (!subscribed) return;
+  // const subscribed = await checkSubscription(chatId, userId);
+  // if (!subscribed) return;
 
   return sendTestPanel(chatId);
 });
