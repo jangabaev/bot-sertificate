@@ -630,6 +630,8 @@ async function stopTest(testId, userId) {
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
+
+  return response.json();
 }
 
 async function requestFirstOk(requests) {
