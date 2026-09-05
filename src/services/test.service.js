@@ -109,7 +109,7 @@ async function sendCertificate(examId) {
 }
 
 async function setTestPending(testId) {
-  return api.get(`/pennding/${encodeURIComponent(testId)}`);
+  return api.get(`/test/pennding/${encodeURIComponent(testId)}`);
 }
 
 module.exports = {
