@@ -57,14 +57,22 @@ async function getTestById(testId, userId) {
 }
 
 async function stopTest(testId, userId) {
+  if (!userId) {
+    throw new Error("stopTest uchun userId kerak");
+  }
+
   await getTestById(testId, userId);
+
+  console.log("STOP TEST:");
+  console.log("testId:", testId);
+  console.log("userId:", userId);
 
   return api.post(
     `/rash/stop/${encodeURIComponent(testId)}`,
     {},
     {
       headers: {
-        user_id: String(userId),
+        "user-id": String(userId),
       },
     },
   );
