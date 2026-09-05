@@ -8,6 +8,8 @@ const { sendCreateTest } = require("../actions/create-test");
 
 const { sendCertificate } = require("../../services/test.service");
 
+const { setTestPending } = require("../../services/test.service");
+
 const { stopTest, getTestById } = require("../../services/test.service");
 
 const { safeAnswer } = require("./safe-answer");
@@ -99,6 +101,30 @@ async function handleTestCallback(bot, query) {
       await bot.sendMessage(
         chatId,
         "❌ Sertifikatlarni yuborishda xatolik yuz berdi.",
+      );
+    }
+
+    return true;
+  }
+
+  if (data.startsWith("test:pending:")) {
+    const testId = data.split(":")[2];
+
+    try {
+      await bot.answerCallbackQuery(query.id);
+
+      await setTestPending(testId);
+
+      await bot.sendMessage(
+        chatId,
+        "⏰ Vaqt tugadi. Test statusi PENDING holatiga o'tkazildi.",
+      );
+    } catch (error) {
+      console.error("Set pending error:", error);
+
+      await bot.sendMessage(
+        chatId,
+        "❌ Test statusini PENDING qilishda xatolik yuz berdi.",
       );
     }
 

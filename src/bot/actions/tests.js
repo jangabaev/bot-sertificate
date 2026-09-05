@@ -79,6 +79,13 @@ async function sendTestDetails(bot, chatId, userId, testId) {
           inline_keyboard: [
             [
               {
+                text: "⏰ Vaqt tugadi",
+                callback_data: `test:pending:${testId}`,
+              },
+            ],
+            ,
+            [
+              {
                 text: t(chatId, "btnStopTest"),
 
                 callback_data: `test:stop:${id}`,

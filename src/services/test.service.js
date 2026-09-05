@@ -108,6 +108,10 @@ async function sendCertificate(examId) {
   return api.get(`/rash/sendmessage/${encodeURIComponent(examId)}`);
 }
 
+async function setTestPending(testId) {
+  return api.get(`/pennding/${encodeURIComponent(testId)}`);
+}
+
 module.exports = {
   getUserTests,
   getActiveTests,
@@ -116,4 +120,5 @@ module.exports = {
   getSubmissionCount,
   assertTestOwner,
   sendCertificate,
+  setTestPending,
 };
