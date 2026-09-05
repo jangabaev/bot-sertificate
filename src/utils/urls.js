@@ -1,16 +1,21 @@
 const { env } = require("../config/env");
 
-function buildCreateTestUrl(testId = null) {
-  const url = new URL(
-    testId ? `/createtest/${testId}` : "/createtest",
-    env.SITE_URL,
-  );
+function buildCreateTestUrl(telegramId, examId = null) {
+  if (!telegramId) {
+    throw new Error("telegramId kerak");
+  }
 
-  return url.toString();
+  const pathname = examId
+    ? `/createtest/${encodeURIComponent(
+        telegramId,
+      )}/${encodeURIComponent(examId)}`
+    : `/createtest/${encodeURIComponent(telegramId)}`;
+
+  return new URL(pathname, `${env.SITE_URL}/`).toString();
 }
 
 function getSiteUrl(path = "/") {
-  return new URL(path, env.SITE_URL).toString();
+  return new URL(path, `${env.SITE_URL}/`).toString();
 }
 
 module.exports = {

@@ -10,7 +10,7 @@ async function sendCreateTest(bot, chatId, userId) {
     );
   }
 
-  const url = buildCreateTestUrl();
+  const url = buildCreateTestUrl(userId);
 
   return bot.sendMessage(
     chatId,

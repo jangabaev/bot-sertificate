@@ -64,7 +64,7 @@ function registerPaymentHandlers(bot) {
       //   throw new Error("Invalid amount");
       // }
 
-      const createTestUrl = buildCreateTestUrl();
+      const createTestUrl = buildCreateTestUrl(userId);
 
       return bot.sendMessage(
         chatId,

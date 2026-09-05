@@ -67,7 +67,7 @@ async function sendTestDetails(bot, chatId, userId, testId) {
 
     const submissionCount = await getSubmissionCount(id);
 
-    const editUrl = buildCreateTestUrl(id);
+    const editUrl = buildCreateTestUrl(userId, id);
 
     return bot.sendMessage(
       chatId,
