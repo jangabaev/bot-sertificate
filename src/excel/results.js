@@ -12,16 +12,33 @@ async function buildResultsExcel(result, testName = "Test") {
   const workbook = new ExcelJS.Workbook();
 
   workbook.creator = "Telegram Quiz Bot";
-
   workbook.created = new Date();
 
-  // =========================
-  // 1. NATIJALAR
-  // =========================
+  const students =
+    result?.new_students ||
+    result?.students ||
+    result?.results ||
+    result?.data ||
+    [];
+
+  const sortedStudents = [...students].sort(
+    (a, b) =>
+      Number(b.total_ball ?? b.score ?? 0) -
+      Number(a.total_ball ?? a.score ?? 0),
+  );
 
   const resultsSheet = workbook.addWorksheet("Natijalar");
 
-  resultsSheet.columns = [
+  // Eng ko'p savollar sonini aniqlaymiz
+  const questionCount = Math.max(
+    0,
+    ...students.map((student) =>
+      Array.isArray(student.test) ? student.test.length : 0,
+    ),
+  );
+
+  // Asosiy ustunlar
+  const columns = [
     {
       header: "№",
       key: "index",
@@ -42,27 +59,29 @@ async function buildResultsExcel(result, testName = "Test") {
       key: "score",
       width: 14,
     },
-    {
-      header: "To'g'ri",
-      key: "correct",
-      width: 12,
-    },
-    {
-      header: "Noto'g'ri",
-      key: "incorrect",
-      width: 12,
-    },
-    {
-      header: "User ID",
-      key: "userId",
-      width: 18,
-    },
   ];
 
-  const students = result?.students || result?.results || result?.data || [];
+  // Savollar uchun dinamik ustunlar
+  for (let i = 1; i <= questionCount; i++) {
+    columns.push({
+      header: String(i),
+      key: `q${i}`,
+      width: 7,
+    });
+  }
 
-  students.forEach((student, index) => {
-    resultsSheet.addRow({
+  // Oxirgi ustun
+  columns.push({
+    header: "User ID",
+    key: "userId",
+    width: 18,
+  });
+
+  resultsSheet.columns = columns;
+
+  // Studentlarni yozamiz
+  sortedStudents.forEach((student, index) => {
+    const row = {
       index: index + 1,
 
       name:
@@ -78,34 +97,65 @@ async function buildResultsExcel(result, testName = "Test") {
         student.total_ball ?? student.score ?? student.percent ?? 0,
       ),
 
-      correct: Number(student.currect ?? student.correct ?? 0),
-
-      incorrect: Number(student.incorect ?? student.incorrect ?? 0),
-
       userId: student.user_id || student.telegram_id || student.userId || "",
-    });
+    };
+
+    // Har savol javobini 1/0 qilib yozamiz
+    for (let i = 0; i < questionCount; i++) {
+      row[`q${i + 1}`] = Array.isArray(student.test)
+        ? Number(student.test[i] ?? 0)
+        : 0;
+    }
+
+    resultsSheet.addRow(row);
   });
 
-  const header = resultsSheet.getRow(1);
+  // Test nomi
+  resultsSheet.insertRow(1, [`Test: ${testName}`]);
+
+  const lastColumn = resultsSheet.columnCount;
+
+  resultsSheet.mergeCells(1, 1, 1, lastColumn);
+
+  resultsSheet.getCell("A1").font = {
+    bold: true,
+    size: 16,
+  };
+
+  resultsSheet.getCell("A1").alignment = {
+    horizontal: "center",
+    vertical: "middle",
+  };
+
+  // Header 2-qator
+  const header = resultsSheet.getRow(2);
 
   header.font = {
     bold: true,
   };
 
   header.alignment = {
-    vertical: "middle",
     horizontal: "center",
+    vertical: "middle",
   };
 
   resultsSheet.views = [
     {
       state: "frozen",
-      ySplit: 1,
+      ySplit: 2,
     },
   ];
 
+  // Savol javoblarini markazga qo'yamiz
+  for (let i = 1; i <= questionCount; i++) {
+    resultsSheet.getColumn(`q${i}`).alignment = {
+      horizontal: "center",
+      vertical: "middle",
+    };
+  }
+
   // =========================
-  // 2. STATISTIKA
+  // STATISTIKA
   // =========================
 
   const statsSheet = workbook.addWorksheet("Statistika");
@@ -149,34 +199,6 @@ async function buildResultsExcel(result, testName = "Test") {
       bar: buildProgressBar(percent),
     });
   });
-
-  const statsHeader = statsSheet.getRow(1);
-
-  statsHeader.font = {
-    bold: true,
-  };
-
-  statsHeader.alignment = {
-    vertical: "middle",
-    horizontal: "center",
-  };
-
-  // =========================
-  // Metadata
-  // =========================
-
-  resultsSheet.insertRow(1, [`Test: ${testName}`]);
-
-  resultsSheet.mergeCells("A1:G1");
-
-  resultsSheet.getCell("A1").font = {
-    bold: true,
-    size: 16,
-  };
-
-  resultsSheet.getCell("A1").alignment = {
-    horizontal: "center",
-  };
 
   return workbook.xlsx.writeBuffer();
 }
