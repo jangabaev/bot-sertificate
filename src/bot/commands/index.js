@@ -21,26 +21,6 @@ function registerCommands(bot) {
 
   bot.onText(/^\/start$/, async (msg) => {
     const chatId = msg.chat.id;
-
-    const userId = msg.from.id;
-
-    try {
-      await createOrUpdateUser(msg.from);
-    } catch (error) {
-      console.error("User save error:", error.message);
-    }
-
-    const subscribed = await checkSubscription(bot, chatId, userId);
-
-    if (!subscribed) {
-      return;
-    }
-
-    return sendMainMenu(bot, chatId, userId);
-  });
-
-  bot.onText(/^\/start$/, async (msg) => {
-    const chatId = msg.chat.id;
     const userId = msg.from.id;
 
     try {
