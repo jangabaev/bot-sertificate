@@ -135,8 +135,6 @@ module.exports = {
 
   gradeDistribution: "📈 *Распределение оценок:*\n",
 
-  delivered: "\n📬 Отправлено: *{count}*",
-
   deliveryFailed: " | ❌ Ошибок: *{count}*",
 
   top5Title: "\n🏆 *Топ 5:*\n",

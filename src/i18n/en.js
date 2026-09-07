@@ -135,8 +135,6 @@ module.exports = {
 
   gradeDistribution: "📈 *Grade distribution:*\n",
 
-  delivered: "\n📬 Delivered: *{count}*",
-
   deliveryFailed: " | ❌ Failed: *{count}*",
 
   top5Title: "\n🏆 *Top 5:*\n",

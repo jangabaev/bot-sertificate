@@ -39,12 +39,7 @@ function formatStopResult(chatId, result, testName) {
     text += `${buildProgressBar(Number(percent))}\n`;
   }
 
-  const delivered = Number(result?.delivered ?? 0);
   const failed = Number(result?.failed ?? 0);
-
-  text += t(chatId, "delivered", {
-    count: delivered,
-  });
 
   if (failed > 0) {
     text += t(chatId, "deliveryFailed", {

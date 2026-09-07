@@ -95,8 +95,6 @@ module.exports = {
 
   gradeDistribution: "📈 *Baholar taqsimoti:*\n",
 
-  delivered: "\n📬 Yuborildi: *{count}*",
-
   deliveryFailed: " | ❌ Xatolik: *{count}*",
 
   top5Title: "\n🏆 *Top 5:*\n",
