@@ -115,6 +115,5 @@ module.exports = {
   stopTest,
   getSubmissionCount,
   assertTestOwner,
-  sendCertificate,
   setTestPending,
 };
