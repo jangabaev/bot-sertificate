@@ -104,10 +104,6 @@ async function getSubmissionCount(testId) {
   }
 }
 
-async function sendCertificate(examId) {
-  return api.get(`/rash/sendmessage/${encodeURIComponent(examId)}`);
-}
-
 async function setTestPending(testId) {
   return api.get(`/test/pennding/${encodeURIComponent(testId)}`);
 }

@@ -6,7 +6,10 @@ const { sendUserTests, sendTestDetails } = require("../actions/tests");
 
 const { sendCreateTest } = require("../actions/create-test");
 
-const { sendCertificate } = require("../../services/test.service");
+const {
+  startCertificateDelivery,
+  getCertificateDeliveryStatus,
+} = require("../../services/certificate.service");
 
 const { setTestPending } = require("../../services/test.service");
 
@@ -87,20 +90,35 @@ async function handleTestCallback(bot, query) {
     const examId = data.split(":")[2];
 
     try {
-      await safeAnswer(bot, query.id, "Sertifikat yuborilmoqda...");
+      await safeAnswer(bot, query.id, "Sertifikat yuborish boshlandi...");
 
-      await sendCertificate(examId);
+      const result = await startCertificateDelivery(examId);
 
       await bot.sendMessage(
         chatId,
-        "✅ Sertifikatlar muvaffaqiyatli yuborildi.",
+        `🚀 Sertifikat yuborish boshlandi!\n\n` +
+          `👥 Jami: ${result.total ?? 0}\n` +
+          `📨 Yuborildi: ${result.sent_count ?? 0}\n\n` +
+          `Sertifikatlar fonda yuboriladi.`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "📊 Yuborish holati",
+                  callback_data: `test:certificate-status:${examId}`,
+                },
+              ],
+            ],
+          },
+        },
       );
     } catch (error) {
       console.error("Send certificate error:", error);
 
       await bot.sendMessage(
         chatId,
-        "❌ Sertifikatlarni yuborishda xatolik yuz berdi.",
+        `❌ Sertifikatlarni yuborishni boshlashda xatolik:\n${error.message}`,
       );
     }
 
@@ -131,6 +149,58 @@ async function handleTestCallback(bot, query) {
     return true;
   }
 
+  if (data.startsWith("test:certificate-status:")) {
+    const examId = data.split(":")[2];
+
+    try {
+      const status = await getCertificateDeliveryStatus(examId);
+
+      const total = Number(status.total ?? 0);
+      const sent = Number(status.sent_count ?? 0);
+      const failed = Number(status.failed_count ?? 0);
+      const pending = Number(status.pending ?? 0);
+
+      const completed = sent + failed;
+
+      const percent = total > 0 ? Math.floor((completed / total) * 100) : 0;
+
+      await bot.sendMessage(
+        chatId,
+        `📨 *Sertifikat yuborish holati*\n\n` +
+          `👥 Jami: *${total}*\n` +
+          `✅ Yuborildi: *${sent}*\n` +
+          `❌ Xato: *${failed}*\n` +
+          `⏳ Qolgan: *${pending}*\n\n` +
+          `📊 Progress: *${percent}%*`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "🔄 Yangilash",
+                  callback_data: `test:certificate-status:${examId}`,
+                },
+              ],
+            ],
+          },
+        },
+      );
+    } catch (error) {
+      if (error.status === 409) {
+        await bot.sendMessage(chatId, "⏳ Sertifikatlar hozir yuborilmoqda.");
+
+        return true;
+
+        // boshqa error
+      }
+      console.error("Certificate status error:", error);
+
+      await bot.sendMessage(chatId, "❌ Sertifikat holatini olishda xatolik.");
+    }
+
+    return true;
+  }
   return false;
 }
 
