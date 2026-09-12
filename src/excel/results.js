@@ -54,16 +54,7 @@ async function buildResultsExcel(result, testName = "Test") {
       key: "grade",
       width: 12,
     },
-    {
-      header: "algebra",
-      key: "algebra",
-      width: 18,
-    },
-    {
-      header: "geometriya",
-      key: "geometriya",
-      width: 18,
-    },
+
     {
       header: "Ball (%)",
       key: "score",
