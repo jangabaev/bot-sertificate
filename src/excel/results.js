@@ -55,6 +55,16 @@ async function buildResultsExcel(result, testName = "Test") {
       width: 12,
     },
     {
+      header: "algebra",
+      key: "algebra",
+      width: 18,
+    },
+    {
+      header: "geometriya",
+      key: "geometriya",
+      width: 18,
+    },
+    {
       header: "Ball (%)",
       key: "score",
       width: 14,
@@ -71,6 +81,18 @@ async function buildResultsExcel(result, testName = "Test") {
   }
 
   // Oxirgi ustun
+  columns.push({
+    header: "algebra",
+    key: "algebra",
+    width: 18,
+  });
+
+  columns.push({
+    header: "geometriya",
+    key: "geometriya",
+    width: 18,
+  });
+
   columns.push({
     header: "User ID",
     key: "userId",
@@ -93,6 +115,8 @@ async function buildResultsExcel(result, testName = "Test") {
 
       grade: student.grade || student.degree || "-",
 
+      algebra: student?.algebra ?? "--",
+      geometriya: student?.geometriya ?? "--",
       score: Number(
         student.total_ball ?? student.score ?? student.percent ?? 0,
       ),
