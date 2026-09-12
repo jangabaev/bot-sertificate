@@ -1,7 +1,7 @@
 const api = require("./api.service");
 
 async function startCertificateDelivery(examId) {
-  return api.get(`/rash/sendmessage/${encodeURIComponent(examId)}`);
+  return api.post(`/rash/sendmessage/${encodeURIComponent(examId)}`);
 }
 
 async function getCertificateDeliveryStatus(examId) {
