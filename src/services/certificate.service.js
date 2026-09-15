@@ -5,7 +5,7 @@ async function startCertificateDelivery(examId) {
 }
 
 async function getCertificateDeliveryStatus(examId) {
-  return api.get(`/rash/sendmessage/status/${encodeURIComponent(examId)}`);
+  return api.get(`/rash/exam/${encodeURIComponent(examId)}/certificate-status`);
 }
 
 async function retryFailedCertificates(examId) {
