@@ -58,47 +58,10 @@ async function handleTestCallback(bot, query) {
     return true;
   }
 
-  if (data.startsWith("test:stop:confirm:")) {
-    const testId = data.split(":")[3];
-
-    await handleStopTest(bot, chatId, userId, testId);
-
-    return true;
-  }
-
-  if (data.startsWith("test:stop:cancel:")) {
-    const testId = data.split(":")[3];
-
-    await sendTestDetails(bot, chatId, userId, testId);
-
-    return true;
-  }
-
   if (data.startsWith("test:stop:")) {
     const testId = data.split(":")[2];
 
-    await bot.sendMessage(
-      chatId,
-      "⚠️ *Testni tugatmoqchimisiz?*\n\n" +
-        "Testni tugatsangiz, o‘quvchilar javoblarini yuborishni davom ettira olmaydi.",
-      {
-        parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "✅ Ha, tugatish",
-                callback_data: `test:stop:confirm:${testId}`,
-              },
-              {
-                text: "❌ Yo‘q",
-                callback_data: `test:stop:cancel:${testId}`,
-              },
-            ],
-          ],
-        },
-      },
-    );
+    await handleStopTest(bot, chatId, userId, testId);
 
     return true;
   }
