@@ -32,7 +32,6 @@ function assertTestOwner(test, userId) {
 
 async function getUserTests(userId) {
   const data = await api.get(`/test?admin_id=${encodeURIComponent(userId)}`);
-
   return normalizeTests(data)
     .filter((test) => getTestId(test))
     .filter((test) => {

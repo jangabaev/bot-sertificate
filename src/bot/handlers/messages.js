@@ -4,7 +4,7 @@ const { env } = require("../../config/env");
 
 const { isCEO, isAdmin, isAdminOrCEO } = require("../../utils/roles");
 
-const { getAdminsCount } = require("../../store/admin.store");
+const { getAdminCount } = require("../../store/admin.store");
 
 const { getState, clearState } = require("../../store/state.store");
 
@@ -221,7 +221,7 @@ function registerMessageHandlers(bot) {
 
       const message = isCEO(userId)
         ? t(chatId, "ceoPanelText", {
-            count: getAdminsCount(),
+            count: getAdminCount(),
           })
         : t(chatId, "adminPanelText");
 

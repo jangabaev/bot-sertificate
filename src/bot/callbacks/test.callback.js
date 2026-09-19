@@ -20,9 +20,8 @@ const { safeAnswer } = require("./safe-answer");
 const { setState } = require("../../store/state.store");
 
 async function handleTestCallback(bot, query) {
+  console.log(1);
   const data = query.data;
-
-  await ctx.answerCallbackQuery();
 
   if (!data.startsWith("test:")) {
     return false;
@@ -35,8 +34,22 @@ async function handleTestCallback(bot, query) {
   await safeAnswer(bot, query.id);
 
   if (data === "test:new") {
-    await sendCreateTest(bot, chatId, userId);
-
+    try {
+      console.log(
+        "-> Yangi test tugmasi bosildi, sendCreateTest chaqirilmoqda...",
+      );
+      await sendCreateTest(bot, chatId, userId);
+      console.log("-> sendCreateTest muvaffaqiyatli bajarildi!");
+    } catch (error) {
+      console.error(
+        "!!! sendCreateTest ichida xatolik yuz berdi !!!",
+        error.message,
+      );
+      await bot.sendMessage(
+        chatId,
+        "❌ Backend so'rovida xatolik: " + error.message,
+      );
+    }
     return true;
   }
 
