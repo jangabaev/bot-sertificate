@@ -83,7 +83,6 @@ async function sendTestDetails(bot, chatId, userId, testId) {
                 callback_data: `test:pending:${testId}`,
               },
             ],
-            ,
             [
               {
                 text: t(chatId, "btnStopTest"),
