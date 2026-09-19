@@ -22,6 +22,8 @@ const { setState } = require("../../store/state.store");
 async function handleTestCallback(bot, query) {
   const data = query.data;
 
+  await ctx.answerCallbackQuery();
+
   if (!data.startsWith("test:")) {
     return false;
   }
