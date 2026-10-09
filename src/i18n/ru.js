@@ -168,4 +168,48 @@ module.exports = {
   ceoPanelText: "👑 *Панель CEO*\n\nКоличество администраторов: {count}",
 
   adminPanelText: "👑 *Панель администратора*\n\nВы можете создавать тесты.",
+
+  // 1-topshiriq: Tasdiqlash dialoglari
+  confirmStopTitle:
+    "Вы уверены, что хотите остановить «{name}»?\n\nТест будет остановлен, результаты подсчитаны и Excel отправлен.\n\n⚠️ Это действие необратимо.",
+  confirmPendingTitle:
+    "Время вышло для теста «{name}»?\n\nТест будет переведён в статус PENDING.",
+  btnConfirmStopYes: "✅ Да, остановить",
+  btnConfirmYes: "✅ Да",
+  btnConfirmNo: "❌ Нет",
+  actionCancelled: "❌ Отменено.",
+  pendingSuccess: "⏰ Время вышло. Тест переведён в статус PENDING.",
+  pendingError: "❌ Ошибка при переводе теста в статус PENDING.",
+  stopTestError: "❌ Ошибка при остановке теста.",
+  testNoPermission: "❌ У вас нет доступа к этому тесту.",
+
+  // 2-topshiriq: Excel tekshiruv xabarlari
+  excelOnly: "❌ Отправьте файл Excel в формате .xlsx.",
+  excelFileTooLarge: "❌ Файл Excel не должен превышать 10 МБ.",
+  excelErrNotXlsx:
+    "❌ Поддерживается только формат .xlsx.\nВ Excel: «Файл» → «Сохранить как» → «Книга Excel (.xlsx)».",
+  excelErrCorrupt: "❌ Файл не удалось открыть. Возможно, он повреждён.",
+  excelErrMultiSheet:
+    "❌ Должен быть только 1 лист (в файле {value} листов).",
+  excelErrMerged: "❌ В файле не должно быть объединённых ячеек.",
+  excelErrFormula: "❌ {cell}: формулы недопустимы.",
+  excelErrTooLarge:
+    "❌ Файл слишком большой (максимум 5000 строк и 300 столбцов вопросов).",
+  excelErrHeaderA1: "❌ В ячейке A1 должно быть «F.I.O».",
+  excelErrHeaderSeq:
+    "❌ {cell}: заголовки должны идти по порядку (1, 2, 3...).",
+  excelErrQuestionCount:
+    "❌ Количество вопросов не совпадает: в файле {value}, в тесте {expected}.",
+  excelErrExtraData: "❌ {cell}: лишние данные за пределами заголовка.",
+  excelErrBadCell: "❌ {cell}: допустимы только 0 или 1 (значение: {value}).",
+  excelErrEmptyCell: "❌ {cell}: пустая ячейка недопустима.",
+  excelErrEmptyName: "❌ {cell}: поле F.I.O не должно быть пустым.",
+  excelErrDuplicateName:
+    "❌ {cell}: дублирующееся имя (также в строке {firstRow}).",
+  excelErrNoStudents: "❌ Должна быть хотя бы 1 строка с данными учеников.",
+  excelValidated:
+    "✅ Файл проверен: {questions} вопросов, {students} учеников.",
+  excelErrMore: "...и ещё {count} ошибок.",
+  excelErrFormatHint:
+    "📋 Формат: строка 1: F.I.O, 1, 2, 3...; остальные строки: имя и 0/1.",
 };

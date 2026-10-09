@@ -16,9 +16,50 @@ const { uploadExcel } = require("../../services/excel.service");
 
 const { getTestById } = require("../../services/test.service");
 
+const { getTestAnswers } = require("../../utils/test");
+
+const { validateResultsExcel } = require("../../utils/excel-validator");
+
 const { sendCreateTest } = require("../actions/create-test");
 
 const MAX_EXCEL_SIZE = 10 * 1024 * 1024;
+
+// Validator xatolarini foydalanuvchiga ko'rsatiladigan matnga o'girish
+function formatValidationErrors(chatId, errors, tFn) {
+  const shown = errors.slice(0, 10);
+  const restCount = errors.length - shown.length;
+
+  const lines = shown.map((err) => {
+    switch (err.code) {
+      case "excelErrBadCell":
+        return tFn(chatId, "excelErrBadCell", { cell: err.cell, value: err.value });
+      case "excelErrEmptyCell":
+        return tFn(chatId, "excelErrEmptyCell", { cell: err.cell });
+      case "excelErrDuplicateName":
+        return tFn(chatId, "excelErrDuplicateName", { cell: err.cell, firstRow: err.firstRow });
+      case "excelErrFormula":
+        return tFn(chatId, "excelErrFormula", { cell: err.cell || "" });
+      case "excelErrExtraData":
+        return tFn(chatId, "excelErrExtraData", { cell: err.cell || "" });
+      case "excelErrHeaderSeq":
+        return tFn(chatId, "excelErrHeaderSeq", { cell: err.cell || "" });
+      case "excelErrQuestionCount":
+        return tFn(chatId, "excelErrQuestionCount", { value: err.value, expected: err.expected });
+      case "excelErrMultiSheet":
+        return tFn(chatId, "excelErrMultiSheet", { value: err.value });
+      default:
+        return tFn(chatId, err.code, err);
+    }
+  });
+
+  if (restCount > 0) {
+    lines.push(tFn(chatId, "excelErrMore", { count: restCount }));
+  }
+
+  lines.push("\n" + tFn(chatId, "excelErrFormatHint"));
+
+  return lines.join("\n");
+}
 
 function getTranslationsForKey(key) {
   return Object.values(translations)
@@ -62,23 +103,19 @@ function registerMessageHandlers(bot) {
 
       const lowerName = filename.toLowerCase();
 
-      const allowedExtension =
-        lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls");
-
-      if (!allowedExtension) {
-        return bot.sendMessage(chatId, t(chatId, "excelOnly"));
+      // Faqat .xlsx qabul qilinadi (.xls emas)
+      if (!lowerName.endsWith(".xlsx")) {
+        return bot.sendMessage(chatId, t(chatId, "excelErrNotXlsx"));
       }
 
       if (document.file_size && document.file_size > MAX_EXCEL_SIZE) {
-        return bot.sendMessage(
-          chatId,
-          "❌ Excel fayl 10 MB dan katta bo'lmasligi kerak.",
-        );
+        return bot.sendMessage(chatId, t(chatId, "excelFileTooLarge"));
       }
 
       try {
-        // Ownership yana tekshiriladi.
-        await getTestById(state.testId, userId);
+        // Ownership tekshiruvi + savol sonini olish
+        const test = await getTestById(state.testId, userId);
+        const expectedQuestionCount = getTestAnswers(test).length;
 
         const fileLink = await bot.getFileLink(document.file_id);
 
@@ -91,6 +128,27 @@ function registerMessageHandlers(bot) {
         const arrayBuffer = await response.arrayBuffer();
 
         const buffer = Buffer.from(arrayBuffer);
+
+        // Fayl tarkibini tekshirish
+        const validation = await validateResultsExcel(buffer, {
+          filename,
+          expectedQuestionCount,
+        });
+
+        if (!validation.ok) {
+          const msg = formatValidationErrors(chatId, validation.errors, t);
+          // State saqlanadi — foydalanuvchi tuzatib qayta yuborishi mumkin
+          return bot.sendMessage(chatId, msg);
+        }
+
+        // Tekshiruvdan o'tdi — backendga yuborish
+        await bot.sendMessage(
+          chatId,
+          t(chatId, "excelValidated", {
+            questions: validation.stats.questions,
+            students: validation.stats.students,
+          }),
+        );
 
         await uploadExcel({
           buffer,

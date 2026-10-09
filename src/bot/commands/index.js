@@ -29,6 +29,9 @@ function registerCommands(bot) {
       console.error("Userni backendga saqlashda xatolik:", error.message);
     }
 
+    const subscribed = await checkSubscription(bot, chatId, userId);
+    if (!subscribed) return;
+
     return sendMainMenu(bot, chatId, userId);
   });
 
@@ -45,11 +48,17 @@ function registerCommands(bot) {
   });
 
   bot.onText(/^\/test$/, async (msg) => {
+    const subscribed = await checkSubscription(bot, msg.chat.id, msg.from.id);
+    if (!subscribed) return;
+
     return sendTestPanel(bot, msg.chat.id);
   });
 
   bot.onText(/^\/language$/, async (msg) => {
     const chatId = msg.chat.id;
+
+    const subscribed = await checkSubscription(bot, chatId, msg.from.id);
+    if (!subscribed) return;
 
     return bot.sendMessage(chatId, t(chatId, "chooseLanguage"), {
       reply_markup: {

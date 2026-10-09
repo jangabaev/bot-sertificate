@@ -10,6 +10,19 @@ const registerCommands = require("./bot/commands");
 const registerCallbacks = require("./bot/callbacks");
 const registerMessageHandlers = require("./bot/handlers/messages");
 
+process.on("unhandledRejection", (error) => {
+  const code = error?.response?.body?.error_code;
+  if (code === 403) {
+    // foydalanuvchi botni bloklagan, e'tibor bermaymiz
+    return;
+  }
+  console.error("❌ Unhandled rejection:", error?.message || error);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("❌ Uncaught exception:", error);
+});
+
 async function bootstrap() {
   try {
     await registerCommands(bot);

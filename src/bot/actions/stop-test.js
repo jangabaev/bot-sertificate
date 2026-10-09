@@ -52,7 +52,7 @@ async function handleStopTest(bot, chatId, userId, testId) {
   } catch (error) {
     console.error("Stop test error:", error);
 
-    return bot.sendMessage(chatId, "❌ Testni to'xtatishda xatolik yuz berdi.");
+    return bot.sendMessage(chatId, t(chatId, "stopTestError"));
   }
 }
 

@@ -136,4 +136,48 @@ module.exports = {
   activeTestsTitle: "📋 *Aktiv testlar:*\n\n",
 
   btnGoSubmit: "🌐 Test topshirish",
+
+  // 1-topshiriq: Tasdiqlash dialoglari
+  confirmStopTitle:
+    "«{name}» testini aniq to'xtatasizmi?\n\nTest to'xtatiladi, natijalar hisoblanadi va Excel yuboriladi.\n\n⚠️ Bu amalni qaytarib bo'lmaydi.",
+  confirmPendingTitle:
+    "«{name}» testi uchun vaqt tugadimi?\n\nTest PENDING holatiga o'tkaziladi.",
+  btnConfirmStopYes: "✅ Ha, to'xtatish",
+  btnConfirmYes: "✅ Ha",
+  btnConfirmNo: "❌ Yo'q",
+  actionCancelled: "❌ Bekor qilindi.",
+  pendingSuccess: "⏰ Vaqt tugadi. Test statusi PENDING holatiga o'tkazildi.",
+  pendingError: "❌ Test statusini PENDING qilishda xatolik yuz berdi.",
+  stopTestError: "❌ Testni to'xtatishda xatolik yuz berdi.",
+  testNoPermission: "❌ Bu test uchun ruxsat yo'q.",
+
+  // 2-topshiriq: Excel tekshiruv xabarlari
+  excelOnly: "❌ Faqat .xlsx formatdagi Excel fayl yuboring.",
+  excelFileTooLarge: "❌ Excel fayl 10 MB dan katta bo'lmasligi kerak.",
+  excelErrNotXlsx:
+    "❌ Faqat .xlsx format qo'llab-quvvatlanadi.\nExcel'da: «Fayl» → «Saqlash» → «Excel Workbook (.xlsx)» ni tanlang.",
+  excelErrCorrupt: "❌ Fayl o'qib bo'lmadi. Fayl buzilgan bo'lishi mumkin.",
+  excelErrMultiSheet: "❌ Faqat 1 ta varaq bo'lishi kerak (faylda {value} ta).",
+  excelErrMerged: "❌ Birlashtirilgan (merged) kataklar bo'lmasligi kerak.",
+  excelErrFormula: "❌ {cell}: formulalar bo'lmasligi kerak.",
+  excelErrTooLarge:
+    "❌ Fayl juda katta (ko'pi bilan 5000 qator va 300 savol ustuni).",
+  excelErrHeaderA1: "❌ A1 katakda «F.I.O» bo'lishi kerak.",
+  excelErrHeaderSeq:
+    "❌ {cell}: sarlavhada raqamlar ketma-ket bo'lishi kerak (1, 2, 3...).",
+  excelErrQuestionCount:
+    "❌ Savol soni mos emas: faylda {value} ta, testda {expected} ta.",
+  excelErrExtraData: "❌ {cell}: sarlavhadan tashqari qo'shimcha ma'lumot.",
+  excelErrBadCell:
+    "❌ {cell}: faqat 0 yoki 1 bo'lishi kerak (qiymat: {value}).",
+  excelErrEmptyCell: "❌ {cell}: bo'sh katak bo'lmasligi kerak.",
+  excelErrEmptyName: "❌ {cell}: F.I.O bo'sh bo'lmasligi kerak.",
+  excelErrDuplicateName:
+    "❌ {cell}: takror ism ({firstRow}-qatorda ham bor).",
+  excelErrNoStudents: "❌ Kamida 1 ta o'quvchi qatori bo'lishi kerak.",
+  excelValidated:
+    "✅ Fayl tekshirildi: {questions} ta savol, {students} ta o'quvchi.",
+  excelErrMore: "...va yana {count} ta xato.",
+  excelErrFormatHint:
+    "📋 To'g'ri format: 1-qator: F.I.O, 1, 2, 3...; keyingi qatorlar: ism va 0/1 lar.",
 };
